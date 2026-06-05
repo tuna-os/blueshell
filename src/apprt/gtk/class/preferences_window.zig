@@ -210,7 +210,9 @@ pub const PreferencesWindow = extern struct {
         n += "title".len;
         config_bridge.setKey(std.heap.c_allocator, "bell-features", buf[0..n]) catch |err| {
             log.warn("bell-features write: {s}", .{@errorName(err)});
+            return;
         };
+        Application.default().triggerReload();
     }
 
     fn limitScrollbackChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
@@ -222,13 +224,16 @@ pub const PreferencesWindow = extern struct {
             const slice = std.fmt.bufPrint(&buf, "{d:.0}", .{v}) catch return;
             config_bridge.setKey(std.heap.c_allocator, "scrollback-limit", slice) catch |err| {
                 log.warn("scrollback-limit write: {s}", .{@errorName(err)});
+                return;
             };
         } else {
             // 0 means unlimited per Ghostty docs.
             config_bridge.setKey(std.heap.c_allocator, "scrollback-limit", "0") catch |err| {
                 log.warn("scrollback-limit write: {s}", .{@errorName(err)});
+                return;
             };
         }
+        Application.default().triggerReload();
     }
 
     fn lineSpacingChanged(adj: *gtk.Adjustment, _: *Self) callconv(.c) void {
@@ -238,7 +243,9 @@ pub const PreferencesWindow = extern struct {
         const slice = std.fmt.bufPrint(&buf, "{d:.0}%", .{pct}) catch return;
         config_bridge.setKey(std.heap.c_allocator, "adjust-cell-height", slice) catch |err| {
             log.warn("adjust-cell-height write: {s}", .{@errorName(err)});
+            return;
         };
+        Application.default().triggerReload();
     }
 
     fn columnSpacingChanged(adj: *gtk.Adjustment, _: *Self) callconv(.c) void {
@@ -248,7 +255,9 @@ pub const PreferencesWindow = extern struct {
         const slice = std.fmt.bufPrint(&buf, "{d:.0}%", .{pct}) catch return;
         config_bridge.setKey(std.heap.c_allocator, "adjust-cell-width", slice) catch |err| {
             log.warn("adjust-cell-width write: {s}", .{@errorName(err)});
+            return;
         };
+        Application.default().triggerReload();
     }
 
     fn tabPositionChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
@@ -260,7 +269,9 @@ pub const PreferencesWindow = extern struct {
         };
         config_bridge.setKey(std.heap.c_allocator, "window-new-tab-position", value) catch |err| {
             log.warn("window-new-tab-position write: {s}", .{@errorName(err)});
+            return;
         };
+        Application.default().triggerReload();
     }
 
     fn useSystemFontChanged(sw: *gtk.Switch, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
@@ -271,7 +282,9 @@ pub const PreferencesWindow = extern struct {
         if (sw.getActive() != 0) {
             config_bridge.setKey(std.heap.c_allocator, "font-family", "") catch |err| {
                 log.warn("font-family clear: {s}", .{@errorName(err)});
+                return;
             };
+            Application.default().triggerReload();
         }
     }
 
@@ -305,6 +318,7 @@ pub const PreferencesWindow = extern struct {
                 log.warn("font-family write: {s}", .{@errorName(err)});
             };
         }
+        Application.default().triggerReload();
     }
 
     /// Populate row widgets from the Application's current Config.
@@ -385,7 +399,9 @@ pub const PreferencesWindow = extern struct {
         };
         config_bridge.setKey(std.heap.c_allocator, "cursor-style", value) catch |err| {
             log.warn("cursor-style write: {s}", .{@errorName(err)});
+            return;
         };
+        Application.default().triggerReload();
     }
 
     fn cursorBlinkingChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
@@ -398,7 +414,9 @@ pub const PreferencesWindow = extern struct {
         };
         config_bridge.setKey(std.heap.c_allocator, "cursor-style-blink", value) catch |err| {
             log.warn("cursor-style-blink write: {s}", .{@errorName(err)});
+            return;
         };
+        Application.default().triggerReload();
     }
 
     fn audibleBellChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
@@ -414,7 +432,9 @@ pub const PreferencesWindow = extern struct {
         const v: []const u8 = if (row.getActive() != 0) "bright" else "";
         config_bridge.setKey(std.heap.c_allocator, "bold-color", v) catch |err| {
             log.warn("bold-color write: {s}", .{@errorName(err)});
+            return;
         };
+        Application.default().triggerReload();
     }
 
     fn scrollbackLimitChanged(adj: *gtk.Adjustment, _: *Self) callconv(.c) void {
@@ -423,7 +443,9 @@ pub const PreferencesWindow = extern struct {
         const slice = std.fmt.bufPrint(&buf, "{d:.0}", .{v}) catch return;
         config_bridge.setKey(std.heap.c_allocator, "scrollback-limit", slice) catch |err| {
             log.warn("scrollback-limit write: {s}", .{@errorName(err)});
+            return;
         };
+        Application.default().triggerReload();
     }
 
     fn opacityValueChanged(adj: *gtk.Adjustment, self: *Self) callconv(.c) void {
@@ -434,7 +456,9 @@ pub const PreferencesWindow = extern struct {
         const alloc = std.heap.c_allocator;
         config_bridge.setKey(alloc, "background-opacity", slice) catch |err| {
             log.warn("opacity write failed: {s}", .{@errorName(err)});
+            return;
         };
+        Application.default().triggerReload();
     }
 
     fn populatePalettes(flowbox: *gtk.FlowBox) !void {
@@ -645,6 +669,7 @@ pub const PreferencesWindow = extern struct {
             try config_bridge.setKeyList(alloc, "palette", entry_slices[0..n_entries]);
         }
         log.info("applied palette: {s} ({d} entries)", .{ p.name, n_entries });
+        Application.default().triggerReload();
     }
 
     const C = Common(Self, Private);

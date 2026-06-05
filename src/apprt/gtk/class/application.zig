@@ -253,6 +253,11 @@ pub const Application = extern struct {
         pending_container_title: ?[:0]const u8 = null,
         pending_container_icon: ?[:0]const u8 = null,
 
+        /// Active GLib timeout id for the debounced reload trigger.
+        /// Slider drags can fire value-changed 30+ times/sec; debouncing
+        /// at 300ms collapses those into a single config reload.
+        pending_reload_timer: c_uint = 0,
+
         pub var offset: c_int = 0;
     };
 
@@ -1628,6 +1633,29 @@ pub const Application = extern struct {
         const i = priv.pending_container_icon;
         priv.pending_container_icon = null;
         return i;
+    }
+
+    /// Trigger a config reload from any caller, debounced 300ms. The
+    /// preferences UI uses this so slider/switch/font changes visibly
+    /// apply without the user having to restart or hit "Reload Config".
+    /// Repeated calls within the debounce window collapse to one reload.
+    pub fn triggerReload(self: *Self) void {
+        const priv = self.private();
+        if (priv.pending_reload_timer != 0) {
+            _ = glib.Source.remove(priv.pending_reload_timer);
+            priv.pending_reload_timer = 0;
+        }
+        priv.pending_reload_timer = glib.timeoutAdd(300, &reloadFire, self);
+    }
+
+    fn reloadFire(data: ?*anyopaque) callconv(.c) c_int {
+        const self: *Self = @ptrCast(@alignCast(data.?));
+        const priv = self.private();
+        priv.pending_reload_timer = 0;
+        priv.core_app.performAction(self.rt(), .reload_config) catch |err| {
+            log.warn("debounced reload err={}", .{err});
+        };
+        return 0; // G_SOURCE_REMOVE
     }
 
     /// Configure libxev to use a specific backend.
