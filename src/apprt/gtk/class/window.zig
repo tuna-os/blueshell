@@ -2169,7 +2169,7 @@ pub const Window = extern struct {
             return;
 
         const config_bridge = @import("config_bridge.zig");
-        config_bridge.setKey(std.heap.c_allocator, "window-theme", value) catch |err| {
+        config_bridge.setKey(std.heap.c_allocator, "window-theme", value, null) catch |err| {
             log.warn("window-theme write: {s}", .{@errorName(err)});
             return;
         };
