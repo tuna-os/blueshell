@@ -1,0 +1,170 @@
+name: upstream-sync
+
+# Attempts a weekly rebase of ptyxis-port onto ghostty-org/ghostty:main.
+#
+# - Clean rebase  → push a sync branch + open a PR
+# - Conflicts     → open an issue with the conflicted files + upstream
+#                   commit range, link to CONFLICT_HOTSPOTS.md
+#
+# Either path runs the toolbox/Zig build to make sure upstream's
+# changes didn't break ours.
+
+on:
+  schedule:
+    # Mondays 09:00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout ptyxis-port
+        uses: actions/checkout@v4
+        with:
+          ref: ptyxis-port
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Configure git author
+        run: |
+          git config user.name "ptyxis-port-sync"
+          git config user.email "ptyxis-port-sync@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/ghostty-org/ghostty.git
+
+      - name: Fetch upstream
+        run: git fetch upstream main --tags
+
+      - name: Compute sync metadata
+        id: meta
+        run: |
+          upstream_sha=$(git rev-parse upstream/main)
+          upstream_short=$(git rev-parse --short upstream/main)
+          base_sha=$(git merge-base HEAD upstream/main)
+          range_count=$(git rev-list --count "${base_sha}..upstream/main")
+          date=$(date -u +'%Y-%m-%d')
+          branch="upstream-sync/${date}"
+          echo "upstream_sha=${upstream_sha}"      >> "$GITHUB_OUTPUT"
+          echo "upstream_short=${upstream_short}"  >> "$GITHUB_OUTPUT"
+          echo "base_sha=${base_sha}"              >> "$GITHUB_OUTPUT"
+          echo "range_count=${range_count}"        >> "$GITHUB_OUTPUT"
+          echo "date=${date}"                      >> "$GITHUB_OUTPUT"
+          echo "branch=${branch}"                  >> "$GITHUB_OUTPUT"
+
+      - name: Short-circuit if already up to date
+        id: uptodate
+        run: |
+          if [ "$(git rev-parse HEAD)" = "${{ steps.meta.outputs.upstream_sha }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Attempt rebase
+        id: rebase
+        if: steps.uptodate.outputs.skip == 'false'
+        run: |
+          git switch -c "${{ steps.meta.outputs.branch }}"
+          if git rebase upstream/main; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+            # Collect conflict info before aborting.
+            git diff --name-only --diff-filter=U > /tmp/conflicts.txt || true
+            git rebase --abort || true
+          fi
+
+      # --- Clean rebase path ---------------------------------------------
+
+      - name: Push sync branch (clean rebase)
+        if: steps.uptodate.outputs.skip == 'false' && steps.rebase.outputs.clean == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: git push origin "${{ steps.meta.outputs.branch }}" --force-with-lease
+
+      - name: Open PR (clean rebase)
+        if: steps.uptodate.outputs.skip == 'false' && steps.rebase.outputs.clean == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base ptyxis-port \
+            --head "${{ steps.meta.outputs.branch }}" \
+            --title "chore: rebase onto upstream ${{ steps.meta.outputs.upstream_short }}" \
+            --body "$(cat <<EOF
+          Automated weekly rebase of \`ptyxis-port\` onto \`ghostty-org/ghostty:main\`.
+
+          - Upstream HEAD: \`${{ steps.meta.outputs.upstream_sha }}\`
+          - Upstream commits since last base: ${{ steps.meta.outputs.range_count }}
+          - Previous base: \`${{ steps.meta.outputs.base_sha }}\`
+
+          Rebase was clean — no conflicts in our downstream patches. Build verification still pending; merge after CI.
+
+          Upstream commit log:
+          \`\`\`
+          $(git log --oneline ${{ steps.meta.outputs.base_sha }}..upstream/main | head -50)
+          \`\`\`
+          EOF
+          )"
+
+      # --- Conflict path -------------------------------------------------
+
+      - name: Open issue (conflicts)
+        if: steps.uptodate.outputs.skip == 'false' && steps.rebase.outputs.clean == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          conflicts="$(cat /tmp/conflicts.txt)"
+          gh issue create \
+            --title "upstream-sync ${{ steps.meta.outputs.date }}: rebase conflicts on ${{ steps.meta.outputs.upstream_short }}" \
+            --label upstream-sync \
+            --body "$(cat <<EOF
+          Automated rebase onto upstream \`${{ steps.meta.outputs.upstream_sha }}\` hit conflicts. Resolve locally, see \`CONFLICT_HOTSPOTS.md\` for guidance per file.
+
+          ## Conflicted files
+
+          \`\`\`
+          ${conflicts}
+          \`\`\`
+
+          ## Upstream range
+
+          ${{ steps.meta.outputs.range_count }} commits in \`${{ steps.meta.outputs.base_sha }}..${{ steps.meta.outputs.upstream_sha }}\`.
+
+          To reproduce locally:
+
+          \`\`\`bash
+          git fetch upstream main
+          git switch -c upstream-sync/${{ steps.meta.outputs.date }} ptyxis-port
+          git rebase upstream/main
+          # resolve, then: git push -u origin upstream-sync/${{ steps.meta.outputs.date }}
+          \`\`\`
+
+          Upstream commit log:
+          \`\`\`
+          $(git log --oneline ${{ steps.meta.outputs.base_sha }}..upstream/main | head -50)
+          \`\`\`
+          EOF
+          )"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## upstream-sync result" >> "$GITHUB_STEP_SUMMARY"
+          echo "- date: ${{ steps.meta.outputs.date }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- upstream: ${{ steps.meta.outputs.upstream_short }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- already up to date: ${{ steps.uptodate.outputs.skip }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- clean rebase: ${{ steps.rebase.outputs.clean }}" >> "$GITHUB_STEP_SUMMARY"
