@@ -308,6 +308,7 @@ pub const PreferencesWindow = extern struct {
 
             // Per-row action menu (Save Changes / Delete).
             const menu = gio.Menu.new();
+
             const save_item = gio.MenuItem.new("Save Changes", null);
             save_item.setActionAndTargetValue(
                 "prefs.profile-save",
@@ -444,7 +445,7 @@ pub const PreferencesWindow = extern struct {
         }
         std.mem.copyForwards(u8, buf[n..], "title");
         n += "title".len;
-        config_bridge.setKey(std.heap.c_allocator, "bell-features", buf[0..n]) catch |err| {
+        config_bridge.setKey(std.heap.c_allocator, "bell-features", buf[0..n], null) catch |err| {
             log.warn("bell-features write: {s}", .{@errorName(err)});
             return;
         };
@@ -458,13 +459,13 @@ pub const PreferencesWindow = extern struct {
             const v = adw.SpinRow.getAdjustment(priv.scrollback_limit_row).getValue();
             var buf: [32]u8 = undefined;
             const slice = std.fmt.bufPrint(&buf, "{d:.0}", .{v}) catch return;
-            config_bridge.setKey(std.heap.c_allocator, "scrollback-limit", slice) catch |err| {
+            config_bridge.setKey(std.heap.c_allocator, "scrollback-limit", slice, null) catch |err| {
                 log.warn("scrollback-limit write: {s}", .{@errorName(err)});
                 return;
             };
         } else {
             // 0 means unlimited per Ghostty docs.
-            config_bridge.setKey(std.heap.c_allocator, "scrollback-limit", "0") catch |err| {
+            config_bridge.setKey(std.heap.c_allocator, "scrollback-limit", "0", null) catch |err| {
                 log.warn("scrollback-limit write: {s}", .{@errorName(err)});
                 return;
             };
@@ -477,7 +478,7 @@ pub const PreferencesWindow = extern struct {
         const pct = (v - 1.0) * 100.0;
         var buf: [32]u8 = undefined;
         const slice = std.fmt.bufPrint(&buf, "{d:.0}%", .{pct}) catch return;
-        config_bridge.setKey(std.heap.c_allocator, "adjust-cell-height", slice) catch |err| {
+        config_bridge.setKey(std.heap.c_allocator, "adjust-cell-height", slice, null) catch |err| {
             log.warn("adjust-cell-height write: {s}", .{@errorName(err)});
             return;
         };
@@ -489,7 +490,7 @@ pub const PreferencesWindow = extern struct {
         const pct = (v - 1.0) * 100.0;
         var buf: [32]u8 = undefined;
         const slice = std.fmt.bufPrint(&buf, "{d:.0}%", .{pct}) catch return;
-        config_bridge.setKey(std.heap.c_allocator, "adjust-cell-width", slice) catch |err| {
+        config_bridge.setKey(std.heap.c_allocator, "adjust-cell-width", slice, null) catch |err| {
             log.warn("adjust-cell-width write: {s}", .{@errorName(err)});
             return;
         };
@@ -503,7 +504,7 @@ pub const PreferencesWindow = extern struct {
             1 => "end",
             else => return,
         };
-        config_bridge.setKey(std.heap.c_allocator, "window-new-tab-position", value) catch |err| {
+        config_bridge.setKey(std.heap.c_allocator, "window-new-tab-position", value, null) catch |err| {
             log.warn("window-new-tab-position write: {s}", .{@errorName(err)});
             return;
         };
@@ -516,7 +517,7 @@ pub const PreferencesWindow = extern struct {
         // built-in/system default. When toggled OFF we leave the value
         // alone — the FontDialogButton will write a new one on next pick.
         if (sw.getActive() != 0) {
-            config_bridge.setKey(std.heap.c_allocator, "font-family", "") catch |err| {
+            config_bridge.setKey(std.heap.c_allocator, "font-family", "", null) catch |err| {
                 log.warn("font-family clear: {s}", .{@errorName(err)});
                 return;
             };
@@ -540,17 +541,17 @@ pub const PreferencesWindow = extern struct {
         if (std.mem.lastIndexOfScalar(u8, str, ' ')) |sp| {
             const family = str[0..sp];
             const size = str[sp + 1 ..];
-            config_bridge.setKey(std.heap.c_allocator, "font-family", family) catch |err| {
+            config_bridge.setKey(std.heap.c_allocator, "font-family", family, null) catch |err| {
                 log.warn("font-family write: {s}", .{@errorName(err)});
             };
             // Only write size if it parses as a number.
             if (std.fmt.parseFloat(f64, size)) |_| {
-                config_bridge.setKey(std.heap.c_allocator, "font-size", size) catch |err| {
+                config_bridge.setKey(std.heap.c_allocator, "font-size", size, null) catch |err| {
                     log.warn("font-size write: {s}", .{@errorName(err)});
                 };
             } else |_| {}
         } else {
-            config_bridge.setKey(std.heap.c_allocator, "font-family", str) catch |err| {
+            config_bridge.setKey(std.heap.c_allocator, "font-family", str, null) catch |err| {
                 log.warn("font-family write: {s}", .{@errorName(err)});
             };
         }
@@ -633,7 +634,7 @@ pub const PreferencesWindow = extern struct {
             2 => "underline",
             else => return,
         };
-        config_bridge.setKey(std.heap.c_allocator, "cursor-style", value) catch |err| {
+        config_bridge.setKey(std.heap.c_allocator, "cursor-style", value, null) catch |err| {
             log.warn("cursor-style write: {s}", .{@errorName(err)});
             return;
         };
@@ -648,7 +649,7 @@ pub const PreferencesWindow = extern struct {
             2 => "false",
             else => return,
         };
-        config_bridge.setKey(std.heap.c_allocator, "cursor-style-blink", value) catch |err| {
+        config_bridge.setKey(std.heap.c_allocator, "cursor-style-blink", value, null) catch |err| {
             log.warn("cursor-style-blink write: {s}", .{@errorName(err)});
             return;
         };
@@ -666,7 +667,7 @@ pub const PreferencesWindow = extern struct {
         // Ghostty's bold-color = bright maps bold to bright ANSI colors.
         // When OFF, clear the key (Ghostty default: no bold-color override).
         const v: []const u8 = if (row.getActive() != 0) "bright" else "";
-        config_bridge.setKey(std.heap.c_allocator, "bold-color", v) catch |err| {
+        config_bridge.setKey(std.heap.c_allocator, "bold-color", v, null) catch |err| {
             log.warn("bold-color write: {s}", .{@errorName(err)});
             return;
         };
@@ -677,7 +678,7 @@ pub const PreferencesWindow = extern struct {
         const v = adj.getValue();
         var buf: [32]u8 = undefined;
         const slice = std.fmt.bufPrint(&buf, "{d:.0}", .{v}) catch return;
-        config_bridge.setKey(std.heap.c_allocator, "scrollback-limit", slice) catch |err| {
+        config_bridge.setKey(std.heap.c_allocator, "scrollback-limit", slice, null) catch |err| {
             log.warn("scrollback-limit write: {s}", .{@errorName(err)});
             return;
         };
@@ -690,7 +691,7 @@ pub const PreferencesWindow = extern struct {
         var buf: [32]u8 = undefined;
         const slice = std.fmt.bufPrint(&buf, "{d:.3}", .{v}) catch return;
         const alloc = std.heap.c_allocator;
-        config_bridge.setKey(alloc, "background-opacity", slice) catch |err| {
+        config_bridge.setKey(alloc, "background-opacity", slice, null) catch |err| {
             log.warn("opacity write failed: {s}", .{@errorName(err)});
             return;
         };
@@ -737,8 +738,8 @@ pub const PreferencesWindow = extern struct {
                 \\.pp-card-{d} label.muted {{ color: #{x:0>2}{x:0>2}{x:0>2}; }}
                 \\
             , .{
-                idx, bg.r, bg.g, bg.b,
-                idx, fg.r, fg.g, fg.b,
+                idx, bg.r,    bg.g,    bg.b,
+                idx, fg.r,    fg.g,    fg.b,
                 idx, muted.r, muted.g, muted.b,
             });
             // Per-dot rules for the 6 indices we render.
@@ -879,15 +880,15 @@ pub const PreferencesWindow = extern struct {
         var hex_buf: [16]u8 = undefined;
         if (v.background) |c| {
             const h = try std.fmt.bufPrint(&hex_buf, "#{x:0>2}{x:0>2}{x:0>2}", .{ c.r, c.g, c.b });
-            try config_bridge.setKey(alloc, "background", h);
+            try config_bridge.setKey(alloc, "background", h, null);
         }
         if (v.foreground) |c| {
             const h = try std.fmt.bufPrint(&hex_buf, "#{x:0>2}{x:0>2}{x:0>2}", .{ c.r, c.g, c.b });
-            try config_bridge.setKey(alloc, "foreground", h);
+            try config_bridge.setKey(alloc, "foreground", h, null);
         }
         if (v.cursor) |c| {
             const h = try std.fmt.bufPrint(&hex_buf, "#{x:0>2}{x:0>2}{x:0>2}", .{ c.r, c.g, c.b });
-            try config_bridge.setKey(alloc, "cursor-color", h);
+            try config_bridge.setKey(alloc, "cursor-color", h, null);
         }
         // Palette entries: emit one `palette = N=#hex` line per color via
         // the list-append helper, which removes any existing palette lines
@@ -902,7 +903,7 @@ pub const PreferencesWindow = extern struct {
             n_entries += 1;
         }
         if (n_entries > 0) {
-            try config_bridge.setKeyList(alloc, "palette", entry_slices[0..n_entries]);
+            try config_bridge.setKeyList(alloc, "palette", entry_slices[0..n_entries], null);
         }
         log.info("applied palette: {s} ({d} entries)", .{ p.name, n_entries });
         Application.default().triggerReload();
