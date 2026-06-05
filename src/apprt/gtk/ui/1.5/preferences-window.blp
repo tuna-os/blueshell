@@ -57,19 +57,6 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
     Adw.PreferencesGroup {
       title: _("Window");
 
-      Adw.ComboRow window_theme_row {
-        title: _("Theme");
-
-        model: StringList {
-          strings [
-            _("Auto"),
-            _("System"),
-            _("Light"),
-            _("Dark"),
-          ]
-        };
-      }
-
       Adw.ActionRow {
         title: _("Transparency");
         subtitle: _("Reduces the opacity of the background window");
@@ -135,10 +122,6 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
         }
       }
 
-      Adw.SwitchRow font_thicken_row {
-        title: _("Thicken Fonts");
-        subtitle: _("Apply a thickening filter to improve legibility on low-DPI displays");
-      }
     }
 
     Adw.PreferencesGroup {
@@ -197,27 +180,6 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
         };
       }
 
-      Adw.ActionRow {
-        title: _("Cursor Opacity");
-        activatable-widget: cursor_opacity_scale;
-
-        Scale cursor_opacity_scale {
-          orientation: horizontal;
-          width-request: 200;
-          valign: center;
-          draw-value: true;
-          value-pos: right;
-          digits: 2;
-
-          adjustment: Adjustment {
-            lower: 0.0;
-            upper: 1.0;
-            step-increment: 0.05;
-            page-increment: 0.25;
-            value: 1.0;
-          };
-        }
-      }
     }
   }
 

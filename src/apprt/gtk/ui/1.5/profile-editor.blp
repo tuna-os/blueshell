@@ -108,6 +108,33 @@ template $GhosttyPtyxisProfileEditor: Adw.PreferencesWindow {
         title: _("Bold is Bright");
         subtitle: _("Render bold text using bright ANSI colors");
       }
+
+      Adw.SwitchRow font_thicken_row {
+        title: _("Thicken Fonts");
+        subtitle: _("Apply a thickening filter to improve legibility on low-DPI displays");
+      }
+
+      Adw.ActionRow {
+        title: _("Cursor Opacity");
+        activatable-widget: cursor_opacity_scale;
+
+        Scale cursor_opacity_scale {
+          orientation: horizontal;
+          width-request: 180;
+          valign: center;
+          draw-value: true;
+          value-pos: right;
+          digits: 2;
+
+          adjustment: Adjustment {
+            lower: 0.0;
+            upper: 1.0;
+            step-increment: 0.05;
+            page-increment: 0.25;
+            value: 1.0;
+          };
+        }
+      }
     }
   }
 
