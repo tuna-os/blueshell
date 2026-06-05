@@ -1501,11 +1501,46 @@ pub const Application = extern struct {
     }
 
     /// Find a working ptyxis-agent binary. Honours $PTYXIS_AGENT_PATH first,
-    /// then falls back to a few well-known install locations.
+    /// then tries paths relative to the running binary (dev + installed),
+    /// then well-known system install locations.
     fn resolveAgentPath(alloc: std.mem.Allocator) ![:0]u8 {
         if (std.posix.getenv("PTYXIS_AGENT_PATH")) |p| {
             return try alloc.dupeZ(u8, p);
         }
+
+        // Try paths relative to the running executable.
+        if (std.fs.selfExePathAlloc(alloc)) |self_exe| {
+            defer alloc.free(self_exe);
+            if (std.fs.path.dirname(self_exe)) |bin_dir| {
+                // ${prefix}/libexec/ptyxis-agent (installed layout)
+                if (std.fs.path.dirname(bin_dir)) |prefix| {
+                    const installed = try std.fs.path.joinZ(
+                        alloc,
+                        &.{ prefix, "libexec", "ptyxis-agent" },
+                    );
+                    errdefer alloc.free(installed);
+                    if (std.fs.accessAbsolute(installed, .{})) {
+                        return installed;
+                    } else |_| alloc.free(installed);
+                }
+
+                // Dev tree: <repo>/third_party/ptyxis-agent/build/ptyxis-agent
+                // Reachable from zig-out/bin via ../../third_party/...
+                if (std.fs.path.dirname(bin_dir)) |zig_out| {
+                    if (std.fs.path.dirname(zig_out)) |repo| {
+                        const dev_path = try std.fs.path.joinZ(
+                            alloc,
+                            &.{ repo, "third_party", "ptyxis-agent", "build", "ptyxis-agent" },
+                        );
+                        errdefer alloc.free(dev_path);
+                        if (std.fs.accessAbsolute(dev_path, .{})) {
+                            return dev_path;
+                        } else |_| alloc.free(dev_path);
+                    }
+                }
+            }
+        } else |_| {}
+
         const candidates = [_][]const u8{
             "/app/libexec/ptyxis-agent",
             "/usr/local/libexec/ptyxis-agent",
