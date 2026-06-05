@@ -36,6 +36,7 @@ pub const PreferencesWindow = extern struct {
         audible_bell_row: *adw.SwitchRow,
         bold_is_bright_row: *adw.SwitchRow,
         scrollback_limit_row: *adw.SpinRow,
+        font_button: *gtk.FontDialogButton,
 
         pub var offset: c_int = 0;
     };
@@ -109,6 +110,46 @@ pub const PreferencesWindow = extern struct {
             null,
             .{},
         );
+        _ = gobject.signalConnectData(
+            priv.font_button.as(gobject.Object),
+            "notify::font-desc",
+            @ptrCast(&fontDescChanged),
+            self,
+            null,
+            .{},
+        );
+    }
+
+    fn fontDescChanged(btn: *gtk.FontDialogButton, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const desc = btn.getFontDesc() orelse return;
+        const FdLibc = struct {
+            extern "c" fn pango_font_description_to_string(d: *anyopaque) [*:0]u8;
+            extern "c" fn pango_font_description_free(d: *anyopaque) void;
+            extern "c" fn g_free(p: ?*anyopaque) void;
+        };
+        defer FdLibc.pango_font_description_free(@ptrCast(desc));
+        const str_z = FdLibc.pango_font_description_to_string(@ptrCast(desc));
+        defer FdLibc.g_free(@ptrCast(@constCast(str_z)));
+        const str = std.mem.span(str_z);
+        // Pango format is "Family[,Family…] Size" e.g. "JetBrains Mono 13"
+        // Ghostty config wants font-family + font-size separately.
+        if (std.mem.lastIndexOfScalar(u8, str, ' ')) |sp| {
+            const family = str[0..sp];
+            const size = str[sp + 1 ..];
+            config_bridge.setKey(std.heap.c_allocator, "font-family", family) catch |err| {
+                log.warn("font-family write: {s}", .{@errorName(err)});
+            };
+            // Only write size if it parses as a number.
+            if (std.fmt.parseFloat(f64, size)) |_| {
+                config_bridge.setKey(std.heap.c_allocator, "font-size", size) catch |err| {
+                    log.warn("font-size write: {s}", .{@errorName(err)});
+                };
+            } else |_| {}
+        } else {
+            config_bridge.setKey(std.heap.c_allocator, "font-family", str) catch |err| {
+                log.warn("font-family write: {s}", .{@errorName(err)});
+            };
+        }
     }
 
     /// Populate row widgets from the Application's current Config.
@@ -398,6 +439,7 @@ pub const PreferencesWindow = extern struct {
             class.bindTemplateChildPrivate("audible_bell_row", .{});
             class.bindTemplateChildPrivate("bold_is_bright_row", .{});
             class.bindTemplateChildPrivate("scrollback_limit_row", .{});
+            class.bindTemplateChildPrivate("font_button", .{});
         }
 
         pub const as = C.Class.as;

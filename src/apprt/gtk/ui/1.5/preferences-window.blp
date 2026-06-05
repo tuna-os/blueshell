@@ -91,18 +91,13 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
         activatable-widget: font_button;
 
         [suffix]
-        Button font_button {
+        FontDialogButton font_button {
           valign: center;
-          label: _("Choose Font…");
 
-          styles [
-            "flat",
-          ]
-        }
-
-        [suffix]
-        Image {
-          icon-name: "go-next-symbolic";
+          dialog: FontDialog {
+            title: _("Choose a Terminal Font");
+            modal: true;
+          };
         }
       }
 
