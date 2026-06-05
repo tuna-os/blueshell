@@ -34,9 +34,15 @@ pub const PreferencesWindow = extern struct {
         cursor_shape_row: *adw.ComboRow,
         cursor_blinking_row: *adw.ComboRow,
         audible_bell_row: *adw.SwitchRow,
+        attention_bell_row: *adw.SwitchRow,
         bold_is_bright_row: *adw.SwitchRow,
+        limit_scrollback_row: *adw.SwitchRow,
         scrollback_limit_row: *adw.SpinRow,
         font_button: *gtk.FontDialogButton,
+        line_spacing_row: *adw.SpinRow,
+        column_spacing_row: *adw.SpinRow,
+        tab_position_row: *adw.ComboRow,
+        use_system_font_switch: *gtk.Switch,
 
         pub var offset: c_int = 0;
     };
@@ -118,6 +124,155 @@ pub const PreferencesWindow = extern struct {
             null,
             .{},
         );
+        _ = gobject.signalConnectData(
+            priv.attention_bell_row.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&attentionBellChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.limit_scrollback_row.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&limitScrollbackChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            adw.SpinRow.getAdjustment(priv.line_spacing_row).as(gobject.Object),
+            "value-changed",
+            @ptrCast(&lineSpacingChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            adw.SpinRow.getAdjustment(priv.column_spacing_row).as(gobject.Object),
+            "value-changed",
+            @ptrCast(&columnSpacingChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.tab_position_row.as(gobject.Object),
+            "notify::selected",
+            @ptrCast(&tabPositionChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.use_system_font_switch.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&useSystemFontChanged),
+            self,
+            null,
+            .{},
+        );
+    }
+
+    fn attentionBellChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
+        const priv = self.private();
+        // bell-features is a packed-struct list. We write a deterministic
+        // list of feature names based on the two switches we expose
+        // (audible/attention) plus the title default Ptyxis users expect.
+        const audible_on = priv.audible_bell_row.getActive() != 0;
+        const attention_on = row.getActive() != 0;
+        writeBellFeatures(audible_on, attention_on);
+    }
+
+    fn writeBellFeatures(audible: bool, attention: bool) void {
+        var buf: [128]u8 = undefined;
+        var n: usize = 0;
+        if (audible) {
+            const w = "audio";
+            std.mem.copyForwards(u8, buf[n..], w);
+            n += w.len;
+        }
+        if (attention) {
+            if (n > 0) {
+                buf[n] = ',';
+                n += 1;
+            }
+            const w = "attention";
+            std.mem.copyForwards(u8, buf[n..], w);
+            n += w.len;
+        }
+        // Title flash is sensible default; preserve.
+        if (n > 0) {
+            buf[n] = ',';
+            n += 1;
+        }
+        std.mem.copyForwards(u8, buf[n..], "title");
+        n += "title".len;
+        config_bridge.setKey(std.heap.c_allocator, "bell-features", buf[0..n]) catch |err| {
+            log.warn("bell-features write: {s}", .{@errorName(err)});
+        };
+    }
+
+    fn limitScrollbackChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
+        const priv = self.private();
+        if (row.getActive() != 0) {
+            // Re-apply the current spin value.
+            const v = adw.SpinRow.getAdjustment(priv.scrollback_limit_row).getValue();
+            var buf: [32]u8 = undefined;
+            const slice = std.fmt.bufPrint(&buf, "{d:.0}", .{v}) catch return;
+            config_bridge.setKey(std.heap.c_allocator, "scrollback-limit", slice) catch |err| {
+                log.warn("scrollback-limit write: {s}", .{@errorName(err)});
+            };
+        } else {
+            // 0 means unlimited per Ghostty docs.
+            config_bridge.setKey(std.heap.c_allocator, "scrollback-limit", "0") catch |err| {
+                log.warn("scrollback-limit write: {s}", .{@errorName(err)});
+            };
+        }
+    }
+
+    fn lineSpacingChanged(adj: *gtk.Adjustment, _: *Self) callconv(.c) void {
+        const v = adj.getValue();
+        const pct = (v - 1.0) * 100.0;
+        var buf: [32]u8 = undefined;
+        const slice = std.fmt.bufPrint(&buf, "{d:.0}%", .{pct}) catch return;
+        config_bridge.setKey(std.heap.c_allocator, "adjust-cell-height", slice) catch |err| {
+            log.warn("adjust-cell-height write: {s}", .{@errorName(err)});
+        };
+    }
+
+    fn columnSpacingChanged(adj: *gtk.Adjustment, _: *Self) callconv(.c) void {
+        const v = adj.getValue();
+        const pct = (v - 1.0) * 100.0;
+        var buf: [32]u8 = undefined;
+        const slice = std.fmt.bufPrint(&buf, "{d:.0}%", .{pct}) catch return;
+        config_bridge.setKey(std.heap.c_allocator, "adjust-cell-width", slice) catch |err| {
+            log.warn("adjust-cell-width write: {s}", .{@errorName(err)});
+        };
+    }
+
+    fn tabPositionChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const i = row.getSelected();
+        const value: []const u8 = switch (i) {
+            0 => "current",
+            1 => "end",
+            else => return,
+        };
+        config_bridge.setKey(std.heap.c_allocator, "window-new-tab-position", value) catch |err| {
+            log.warn("window-new-tab-position write: {s}", .{@errorName(err)});
+        };
+    }
+
+    fn useSystemFontChanged(sw: *gtk.Switch, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        // No Ghostty config key tracks "use system font" directly. When
+        // toggled ON we clear font-family so Ghostty falls back to its
+        // built-in/system default. When toggled OFF we leave the value
+        // alone — the FontDialogButton will write a new one on next pick.
+        if (sw.getActive() != 0) {
+            config_bridge.setKey(std.heap.c_allocator, "font-family", "") catch |err| {
+                log.warn("font-family clear: {s}", .{@errorName(err)});
+            };
+        }
     }
 
     fn fontDescChanged(btn: *gtk.FontDialogButton, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
@@ -174,9 +329,50 @@ pub const PreferencesWindow = extern struct {
         const blink_idx: c_uint = if (cfg.@"cursor-style-blink") |b| (if (b) 1 else 2) else 0;
         priv.cursor_blinking_row.setSelected(blink_idx);
 
-        // Scrollback.
+        // Scrollback. "Limit Scrollback" is ON when limit > 0.
+        const sb = cfg.@"scrollback-limit";
+        priv.limit_scrollback_row.setActive(if (sb > 0) 1 else 0);
         const sb_adj = adw.SpinRow.getAdjustment(priv.scrollback_limit_row);
-        sb_adj.setValue(@floatFromInt(@min(cfg.@"scrollback-limit", std.math.maxInt(u32))));
+        if (sb > 0) {
+            sb_adj.setValue(@floatFromInt(@min(sb, std.math.maxInt(u32))));
+        }
+
+        // Cell spacing — Ghostty stores adjust-cell-{height,width} as an
+        // optional MetricModifier. Treat the absent case as 1.0× (no
+        // adjustment) and only attempt percentage display for the
+        // .percent variant.
+        priv.line_spacing_row.setValue(spacingValueFromConfig(cfg.@"adjust-cell-height"));
+        priv.column_spacing_row.setValue(spacingValueFromConfig(cfg.@"adjust-cell-width"));
+
+        // Tab position.
+        priv.tab_position_row.setSelected(switch (cfg.@"window-new-tab-position") {
+            .current => 0,
+            .end => 1,
+        });
+
+        // Use system font: ON when font-family is empty.
+        const fam_empty = cfg.@"font-family".list.items.len == 0;
+        priv.use_system_font_switch.setActive(if (fam_empty) 1 else 0);
+
+        // Bell features.
+        const bf = cfg.@"bell-features";
+        priv.audible_bell_row.setActive(if (bf.audio) 1 else 0);
+        priv.attention_bell_row.setActive(if (bf.attention) 1 else 0);
+
+        // Bold-is-bright: ON iff bold-color resolves to .bright.
+        const bib = if (cfg.@"bold-color") |bc| switch (bc) {
+            .bright => true,
+            else => false,
+        } else false;
+        priv.bold_is_bright_row.setActive(if (bib) 1 else 0);
+    }
+
+    fn spacingValueFromConfig(mm: anytype) f64 {
+        const opt = mm orelse return 1.0;
+        return switch (opt) {
+            .percent => |p| 1.0 + @as(f64, @floatCast(p)) / 100.0,
+            else => 1.0,
+        };
     }
 
     fn cursorShapeChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
@@ -205,17 +401,19 @@ pub const PreferencesWindow = extern struct {
         };
     }
 
-    fn audibleBellChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const v: []const u8 = if (row.getActive() != 0) "true" else "false";
-        config_bridge.setKey(std.heap.c_allocator, "audible-bell", v) catch |err| {
-            log.warn("audible-bell write: {s}", .{@errorName(err)});
-        };
+    fn audibleBellChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
+        const priv = self.private();
+        const audible_on = row.getActive() != 0;
+        const attention_on = priv.attention_bell_row.getActive() != 0;
+        writeBellFeatures(audible_on, attention_on);
     }
 
     fn boldIsBrightChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const v: []const u8 = if (row.getActive() != 0) "true" else "false";
-        config_bridge.setKey(std.heap.c_allocator, "bold-is-bright", v) catch |err| {
-            log.warn("bold-is-bright write: {s}", .{@errorName(err)});
+        // Ghostty's bold-color = bright maps bold to bright ANSI colors.
+        // When OFF, clear the key (Ghostty default: no bold-color override).
+        const v: []const u8 = if (row.getActive() != 0) "bright" else "";
+        config_bridge.setKey(std.heap.c_allocator, "bold-color", v) catch |err| {
+            log.warn("bold-color write: {s}", .{@errorName(err)});
         };
     }
 
@@ -437,9 +635,15 @@ pub const PreferencesWindow = extern struct {
             class.bindTemplateChildPrivate("cursor_shape_row", .{});
             class.bindTemplateChildPrivate("cursor_blinking_row", .{});
             class.bindTemplateChildPrivate("audible_bell_row", .{});
+            class.bindTemplateChildPrivate("attention_bell_row", .{});
             class.bindTemplateChildPrivate("bold_is_bright_row", .{});
+            class.bindTemplateChildPrivate("limit_scrollback_row", .{});
             class.bindTemplateChildPrivate("scrollback_limit_row", .{});
             class.bindTemplateChildPrivate("font_button", .{});
+            class.bindTemplateChildPrivate("line_spacing_row", .{});
+            class.bindTemplateChildPrivate("column_spacing_row", .{});
+            class.bindTemplateChildPrivate("tab_position_row", .{});
+            class.bindTemplateChildPrivate("use_system_font_switch", .{});
         }
 
         pub const as = C.Class.as;

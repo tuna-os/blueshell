@@ -16,7 +16,7 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
 
   Adw.PreferencesPage appearance_page {
     title: _("Appearance");
-    icon-name: "applications-graphics-symbolic";
+    icon-name: "font-select-symbolic";
 
     Adw.PreferencesGroup {
       title: _("Palette");
@@ -67,12 +67,19 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
           valign: center;
           draw-value: true;
           value-pos: right;
+          digits: 2;
+
+          marks [
+            mark (0.25),
+            mark (0.5),
+            mark (0.75),
+          ]
 
           adjustment: Adjustment {
             lower: 0.0;
             upper: 1.0;
             step-increment: 0.05;
-            page-increment: 0.1;
+            page-increment: 0.25;
             value: 1.0;
           };
         }
@@ -82,58 +89,58 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
     Adw.PreferencesGroup {
       title: _("Font");
 
-      Adw.SwitchRow use_system_font_row {
-        title: _("Use System Font");
-      }
+      Adw.ExpanderRow use_system_font_row {
+        title: _("Use System _Font");
+        use-underline: true;
+        show-enable-switch: false;
 
-      Adw.ActionRow custom_font_row {
-        title: _("Custom Font");
-        activatable-widget: font_button;
-
-        [suffix]
-        FontDialogButton font_button {
+        [action]
+        Switch use_system_font_switch {
+          halign: end;
           valign: center;
+        }
 
-          dialog: FontDialog {
-            title: _("Choose a Terminal Font");
-            modal: true;
-          };
+        Adw.ActionRow custom_font_row {
+          title: _("Custom Font");
+          activatable-widget: font_button;
+
+          [suffix]
+          FontDialogButton font_button {
+            valign: center;
+
+            dialog: FontDialog {
+              title: _("Choose a Terminal Font");
+              modal: true;
+            };
+          }
         }
       }
+    }
 
+    Adw.PreferencesGroup {
       Adw.SpinRow line_spacing_row {
         title: _("Line Spacing");
+        digits: 2;
 
         adjustment: Adjustment {
-          lower: 0.5;
-          upper: 4.0;
+          lower: 1.0;
+          upper: 2.0;
           value: 1.0;
-          step-increment: 0.05;
-          page-increment: 0.1;
+          step-increment: 0.1;
+          page-increment: 0.5;
         };
       }
 
       Adw.SpinRow column_spacing_row {
         title: _("Column Spacing");
+        digits: 2;
 
         adjustment: Adjustment {
-          lower: 0.5;
-          upper: 4.0;
+          lower: 1.0;
+          upper: 2.0;
           value: 1.0;
-          step-increment: 0.05;
-          page-increment: 0.1;
-        };
-      }
-
-      Adw.ComboRow blinking_text_row {
-        title: _("Blinking Text");
-
-        model: StringList {
-          strings [
-            _("Always"),
-            _("Never"),
-            _("Focused"),
-          ]
+          step-increment: 0.1;
+          page-increment: 0.5;
         };
       }
     }
@@ -169,15 +176,39 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
 
   Adw.PreferencesPage behavior_page {
     title: _("Behavior");
-    icon-name: "preferences-system-symbolic";
+    icon-name: "preferences-desktop-accessibility-symbolic";
 
     Adw.PreferencesGroup {
-      title: _("Terminal");
+      title: _("Interface");
+
+      Adw.ComboRow tab_position_row {
+        title: _("New Tab Position");
+
+        model: StringList {
+          strings [
+            _("Next"),
+            _("Last"),
+          ]
+        };
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Bell");
 
       Adw.SwitchRow audible_bell_row {
         title: _("Audible Bell");
-        subtitle: _("Play a sound on terminal bell");
+        subtitle: _("Emit an audible bell when requested by the active tab");
       }
+
+      Adw.SwitchRow attention_bell_row {
+        title: _("Attention Bell");
+        subtitle: _("Request user attention from the window manager on bell");
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Display");
 
       Adw.SwitchRow bold_is_bright_row {
         title: _("Bold is Bright");
@@ -186,11 +217,17 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
     }
 
     Adw.PreferencesGroup {
-      title: _("Scrollback");
+      title: _("Scrolling");
+
+      Adw.SwitchRow limit_scrollback_row {
+        title: _("Limit Scrollback");
+        subtitle: _("Restrict the number of lines saved for scrollback");
+      }
 
       Adw.SpinRow scrollback_limit_row {
-        title: _("Scrollback Limit");
-        subtitle: _("Number of lines retained for scrollback (0 = unlimited)");
+        title: _("Scrollback Lines");
+        subtitle: _("The number of lines to keep for scrollback");
+        sensitive: bind limit_scrollback_row.active;
 
         adjustment: Adjustment {
           lower: 0;
@@ -205,7 +242,7 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
 
   Adw.PreferencesPage shortcuts_page {
     title: _("Shortcuts");
-    icon-name: "input-keyboard-symbolic";
+    icon-name: "preferences-desktop-keyboard-shortcuts-symbolic";
 
     Adw.PreferencesGroup {
       title: _("Keybindings");
