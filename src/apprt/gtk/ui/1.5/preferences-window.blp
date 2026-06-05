@@ -19,24 +19,19 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
     icon-name: "applications-graphics-symbolic";
 
     Adw.PreferencesGroup {
-      title: _("Theme");
-
-      Adw.ComboRow theme_row {
-        title: _("Window Theme");
-        subtitle: _("Choose between light, dark, or system default");
-        model: StringList {
-          strings [
-            _("System"),
-            _("Light"),
-            _("Dark"),
-          ]
-        };
-      }
-    }
-
-    Adw.PreferencesGroup {
       title: _("Palette");
-      description: _("Pick a color scheme. Writes background, foreground, cursor-color, and palette entries to your config.");
+
+      [header-suffix]
+      Button {
+        styles [
+          "flat",
+        ]
+
+        Adw.ButtonContent {
+          icon-name: "down-small-symbolic";
+          label: _("Show All Palettes");
+        }
+      }
 
       ScrolledWindow {
         hscrollbar-policy: never;
@@ -47,7 +42,7 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
         FlowBox palette_flowbox {
           column-spacing: 9;
           row-spacing: 9;
-          max-children-per-line: 4;
+          max-children-per-line: 3;
           selection-mode: none;
           homogeneous: true;
           margin-top: 6;
@@ -87,11 +82,15 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
     Adw.PreferencesGroup {
       title: _("Font");
 
-      Adw.ActionRow font_row {
-        title: _("Terminal Font");
-        subtitle: _("Monospace font used by the terminal");
+      Adw.SwitchRow use_system_font_row {
+        title: _("Use System Font");
+      }
+
+      Adw.ActionRow custom_font_row {
+        title: _("Custom Font");
         activatable-widget: font_button;
 
+        [suffix]
         Button font_button {
           valign: center;
           label: _("Choose Font…");
@@ -100,18 +99,74 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
             "flat",
           ]
         }
+
+        [suffix]
+        Image {
+          icon-name: "go-next-symbolic";
+        }
       }
 
-      Adw.SpinRow font_size_row {
-        title: _("Font Size");
-        subtitle: _("Points");
+      Adw.SpinRow line_spacing_row {
+        title: _("Line Spacing");
 
         adjustment: Adjustment {
-          lower: 4;
-          upper: 96;
-          value: 13;
-          step-increment: 1;
-          page-increment: 2;
+          lower: 0.5;
+          upper: 4.0;
+          value: 1.0;
+          step-increment: 0.05;
+          page-increment: 0.1;
+        };
+      }
+
+      Adw.SpinRow column_spacing_row {
+        title: _("Column Spacing");
+
+        adjustment: Adjustment {
+          lower: 0.5;
+          upper: 4.0;
+          value: 1.0;
+          step-increment: 0.05;
+          page-increment: 0.1;
+        };
+      }
+
+      Adw.ComboRow blinking_text_row {
+        title: _("Blinking Text");
+
+        model: StringList {
+          strings [
+            _("Always"),
+            _("Never"),
+            _("Focused"),
+          ]
+        };
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Cursor");
+
+      Adw.ComboRow cursor_shape_row {
+        title: _("Cursor Shape");
+
+        model: StringList {
+          strings [
+            _("Block"),
+            _("I-Beam"),
+            _("Underline"),
+          ]
+        };
+      }
+
+      Adw.ComboRow cursor_blinking_row {
+        title: _("Cursor Blinking");
+
+        model: StringList {
+          strings [
+            _("Follow System"),
+            _("On"),
+            _("Off"),
+          ]
         };
       }
     }
@@ -119,7 +174,7 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
 
   Adw.PreferencesPage behavior_page {
     title: _("Behavior");
-    icon-name: "system-run-symbolic";
+    icon-name: "preferences-system-symbolic";
 
     Adw.PreferencesGroup {
       title: _("Terminal");
@@ -132,23 +187,6 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
       Adw.SwitchRow bold_is_bright_row {
         title: _("Bold is Bright");
         subtitle: _("Render bold text using bright ANSI colors");
-      }
-
-      Adw.ComboRow cursor_style_row {
-        title: _("Cursor Style");
-        subtitle: _("The shape of the cursor in the terminal");
-        model: StringList {
-          strings [
-            _("Block"),
-            _("Underline"),
-            _("Bar"),
-          ]
-        };
-      }
-
-      Adw.SwitchRow cursor_blink_row {
-        title: _("Blinking Cursor");
-        subtitle: _("Cursor pulses to indicate position");
       }
     }
 
@@ -175,8 +213,49 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
     icon-name: "input-keyboard-symbolic";
 
     Adw.PreferencesGroup {
-      title: _("Shortcuts");
-      description: _("Keybindings are configured in your config file. This page is a placeholder until the shortcut editor lands.");
+      description: _("Keybindings are configured in your Ghostty config file. A full shortcut editor lands in the next step.");
+    }
+  }
+
+  Adw.PreferencesPage profiles_page {
+    title: _("Profiles");
+    icon-name: "system-users-symbolic";
+
+    Adw.PreferencesGroup {
+      title: _("Profiles");
+
+      ListBox profiles_listbox {
+        selection-mode: none;
+
+        styles [
+          "boxed-list",
+        ]
+
+        Adw.ActionRow default_profile_row {
+          title: _("Default");
+          activatable: true;
+
+          [suffix]
+          Image {
+            icon-name: "object-select-symbolic";
+          }
+
+          [suffix]
+          MenuButton {
+            valign: center;
+            icon-name: "view-more-symbolic";
+
+            styles [
+              "flat",
+            ]
+          }
+        }
+
+        Adw.ButtonRow add_profile_row {
+          title: _("Add Profile");
+          start-icon-name: "list-add-symbolic";
+        }
+      }
     }
   }
 }

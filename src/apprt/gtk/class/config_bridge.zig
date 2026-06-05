@@ -111,6 +111,61 @@ pub fn setKey(alloc: Allocator, key: []const u8, value: []const u8) !void {
     log.info("config write: {s} = {s} -> {s}", .{ key, value, path });
 }
 
+/// Like `setKey`, but for list-append keys (e.g. `palette`, `keybind`,
+/// `font-family`). Removes every existing assignment to `key` from the
+/// file, then appends one new line per element of `values`.
+pub fn setKeyList(alloc: Allocator, key: []const u8, values: []const []const u8) !void {
+    const path = try resolveConfigPath(alloc);
+    defer alloc.free(path);
+
+    if (std.fs.path.dirname(path)) |dir| {
+        std.fs.makeDirAbsolute(dir) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => return err,
+        };
+    }
+
+    var existing: []u8 = &.{};
+    defer if (existing.len != 0) alloc.free(existing);
+    existing = blk: {
+        const f = std.fs.openFileAbsolute(path, .{}) catch |err| switch (err) {
+            error.FileNotFound => break :blk &.{},
+            else => return err,
+        };
+        defer f.close();
+        break :blk try f.readToEndAlloc(alloc, 16 * 1024 * 1024);
+    };
+
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(alloc);
+
+    var iter = std.mem.splitScalar(u8, existing, '\n');
+    var first = true;
+    while (iter.next()) |line| {
+        if (lineAssignsKey(line, key)) continue;
+        if (!first) try out.append(alloc, '\n');
+        try out.appendSlice(alloc, line);
+        first = false;
+    }
+    if (out.items.len > 0 and out.items[out.items.len - 1] != '\n') {
+        try out.append(alloc, '\n');
+    }
+    for (values) |v| {
+        try out.writer(alloc).print("{s} = {s}\n", .{ key, v });
+    }
+
+    const tmp_path = try std.fmt.allocPrint(alloc, "{s}.tmp", .{path});
+    defer alloc.free(tmp_path);
+    {
+        const f = try std.fs.createFileAbsolute(tmp_path, .{ .truncate = true });
+        defer f.close();
+        try f.writeAll(out.items);
+    }
+    try std.fs.renameAbsolute(tmp_path, path);
+
+    log.info("config list write: {s} ({d} entries) -> {s}", .{ key, values.len, path });
+}
+
 /// Returns true if `line` is a non-comment assignment of `key`.
 fn lineAssignsKey(line: []const u8, key: []const u8) bool {
     var i: usize = 0;

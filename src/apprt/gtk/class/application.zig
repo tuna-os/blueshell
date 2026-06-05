@@ -1365,6 +1365,13 @@ pub const Application = extern struct {
                 log.warn("config_bridge.setKey test failed: {s}", .{@errorName(err)});
             };
         }
+
+        // Optional: smoke test the palette applier.
+        if (std.posix.getenv("GHOSTTY_PTYXIS_TEST_PALETTE")) |id| {
+            PreferencesWindow.applyPalette(id) catch |err| {
+                log.warn("applyPalette test failed: {s}", .{@errorName(err)});
+            };
+        }
     }
 
     fn startupContainerClient(self: *Self) void {

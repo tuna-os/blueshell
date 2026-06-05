@@ -76,89 +76,115 @@ pub const PreferencesWindow = extern struct {
         defer alloc.free(palettes);
 
         for (palettes) |p| {
-            // Choose the dark variant if it has data, else light.
-            const v: *const palette_mod.Variant = if (p.dark.background != null) &p.dark else &p.light;
-
-            // Container: vertical box with swatch row + name label.
-            const box = gtk.Box.new(gtk.Orientation.vertical, 4);
-            box.as(gtk.Widget).addCssClass("card");
-            box.as(gtk.Widget).setMarginTop(4);
-            box.as(gtk.Widget).setMarginBottom(4);
-            box.as(gtk.Widget).setMarginStart(4);
-            box.as(gtk.Widget).setMarginEnd(4);
-
-            // Background+foreground big swatch box.
-            const bg = v.background orelse palette_mod.RGB{ .r = 0x20, .g = 0x20, .b = 0x20 };
-            const fg = v.foreground orelse palette_mod.RGB{ .r = 0xe0, .g = 0xe0, .b = 0xe0 };
-            const big_label = gtk.Label.new("Aa");
-            big_label.as(gtk.Widget).setHexpand(1);
-            big_label.as(gtk.Widget).setVexpand(1);
-
-            // CSS-style inline rule for swatch.
-            const css_provider = gtk.CssProvider.new();
-            defer _ = gobject.Object.unref(css_provider.as(gobject.Object));
-
-            var css_buf: [256]u8 = undefined;
-            const css = std.fmt.bufPrintZ(&css_buf, "label.ptyxis-swatch{{background:#{x:0>2}{x:0>2}{x:0>2};color:#{x:0>2}{x:0>2}{x:0>2};padding:14px;border-radius:6px;font-size:18px;}}", .{
-                bg.r, bg.g, bg.b, fg.r, fg.g, fg.b,
-            }) catch continue;
-            _ = css_provider.loadFromString(css);
-            const ctx = big_label.as(gtk.Widget).getStyleContext();
-            ctx.addProvider(css_provider.as(gtk.StyleProvider), 800);
-            big_label.as(gtk.Widget).addCssClass("ptyxis-swatch");
-
-            box.append(big_label.as(gtk.Widget));
-
-            // 16-color strip.
-            const strip = gtk.Box.new(gtk.Orientation.horizontal, 2);
-            for (v.colors) |maybe| {
-                const c = maybe orelse continue;
-                const cell = gtk.DrawingArea.new();
-                cell.as(gtk.Widget).setSizeRequest(8, 8);
-                const cell_css = gtk.CssProvider.new();
-                defer _ = gobject.Object.unref(cell_css.as(gobject.Object));
-                var cb: [128]u8 = undefined;
-                const ccss = std.fmt.bufPrintZ(&cb, "drawingarea{{background:#{x:0>2}{x:0>2}{x:0>2};border-radius:1px;}}", .{
-                    c.r, c.g, c.b,
-                }) catch continue;
-                _ = cell_css.loadFromString(ccss);
-                cell.as(gtk.Widget).getStyleContext().addProvider(cell_css.as(gtk.StyleProvider), 800);
-                strip.append(cell.as(gtk.Widget));
-            }
-            box.append(strip.as(gtk.Widget));
-
-            // Name label.
-            const name_z = std.heap.c_allocator.dupeZ(u8, p.name) catch continue;
-            const name_label = gtk.Label.new(name_z.ptr);
-            std.heap.c_allocator.free(name_z);
-            name_label.setEllipsize(.middle);
-            box.append(name_label.as(gtk.Widget));
-
-            // Clickable wrapper.
-            const btn = gtk.Button.new();
-            btn.setChild(box.as(gtk.Widget));
-            btn.as(gtk.Widget).addCssClass("flat");
-            btn.as(gtk.Widget).setTooltipText(name_label.getText());
-
-            // Store the palette id in a GObject data slot so the click
-            // handler can recover it. We dupe so the lifetime survives
-            // the palettes-slice deinit.
-            const id_z = std.heap.c_allocator.dupeZ(u8, p.id) catch continue;
-            gobject.Object.setData(btn.as(gobject.Object), "ptyxis-palette-id", @ptrCast(@constCast(id_z.ptr)));
-
-            _ = gobject.signalConnectData(
-                btn.as(gobject.Object),
-                "clicked",
-                @ptrCast(&onPaletteClicked),
-                null,
-                null,
-                .{},
-            );
-
-            flowbox.append(btn.as(gtk.Widget));
+            const card = makePaletteCard(p) orelse continue;
+            flowbox.append(card.as(gtk.Widget));
         }
 
         log.info("populated {d} palettes in flowbox", .{palettes.len});
+    }
+
+    /// Build a single Ptyxis-style palette swatch card. Returns null on
+    /// allocator failures; caller appends the result to a container.
+    fn makePaletteCard(p: palette_mod.Palette) ?*gtk.Button {
+        // Prefer the dark variant if it has data, else light.
+        const v: *const palette_mod.Variant = if (p.dark.background != null) &p.dark else &p.light;
+        const bg = v.background orelse palette_mod.RGB{ .r = 0x20, .g = 0x20, .b = 0x20 };
+        const fg = v.foreground orelse palette_mod.RGB{ .r = 0xe0, .g = 0xe0, .b = 0xe0 };
+        // For the sample-text colour use a slightly dimmed foreground —
+        // Ptyxis uses an italic muted variant.
+        const muted = palette_mod.RGB{
+            .r = @intCast((@as(u16, fg.r) + @as(u16, bg.r) * 2) / 3),
+            .g = @intCast((@as(u16, fg.g) + @as(u16, bg.g) * 2) / 3),
+            .b = @intCast((@as(u16, fg.b) + @as(u16, bg.b) * 2) / 3),
+        };
+
+        // Outer vertical box: name (top), sample (middle), color strip (bottom).
+        const box = gtk.Box.new(gtk.Orientation.vertical, 8);
+        box.as(gtk.Widget).setHexpand(1);
+        box.as(gtk.Widget).setVexpand(0);
+        box.as(gtk.Widget).setMarginTop(14);
+        box.as(gtk.Widget).setMarginBottom(14);
+        box.as(gtk.Widget).setMarginStart(14);
+        box.as(gtk.Widget).setMarginEnd(14);
+
+        // Card-level CSS — background and rounded corners coloured by palette bg.
+        const card_css = gtk.CssProvider.new();
+        var card_buf: [192]u8 = undefined;
+        const card_rule = std.fmt.bufPrintZ(&card_buf, ".ptyxis-pal-card{{background:#{x:0>2}{x:0>2}{x:0>2};border-radius:9px;}}.ptyxis-pal-card label{{color:#{x:0>2}{x:0>2}{x:0>2};}}.ptyxis-pal-card label.muted{{color:#{x:0>2}{x:0>2}{x:0>2};font-style:italic;font-family:monospace;}}", .{
+            bg.r, bg.g, bg.b, fg.r, fg.g, fg.b, muted.r, muted.g, muted.b,
+        }) catch return null;
+        _ = card_css.loadFromString(card_rule);
+
+        // Click-target wraps the box.
+        const btn = gtk.Button.new();
+        btn.setChild(box.as(gtk.Widget));
+        btn.as(gtk.Widget).addCssClass("flat");
+        btn.as(gtk.Widget).addCssClass("ptyxis-pal-card");
+        gtk.StyleContext.addProviderForDisplay(
+            (gtk.Widget.getDisplay(btn.as(gtk.Widget))),
+            card_css.as(gtk.StyleProvider),
+            800,
+        );
+        _ = gobject.Object.unref(card_css.as(gobject.Object));
+
+        // Name row.
+        const name_z = std.heap.c_allocator.dupeZ(u8, p.name) catch return null;
+        defer std.heap.c_allocator.free(name_z);
+        const name_label = gtk.Label.new(name_z.ptr);
+        name_label.setXalign(0);
+        name_label.setEllipsize(.middle);
+        name_label.as(gtk.Widget).setHexpand(1);
+        name_label.as(gtk.Widget).addCssClass("heading");
+        box.append(name_label.as(gtk.Widget));
+
+        // Sample paragraph in italic muted style.
+        const sample = gtk.Label.new("The quick brown\nfox jumps over\nthe lazy dog");
+        sample.setXalign(0);
+        sample.setWrap(1);
+        sample.as(gtk.Widget).setHexpand(1);
+        sample.as(gtk.Widget).addCssClass("muted");
+        box.append(sample.as(gtk.Widget));
+
+        // Color strip — 7 representative colors from the ANSI 1..6 + 13.
+        // Matches Ptyxis's row of seven dots.
+        const strip = gtk.Box.new(gtk.Orientation.horizontal, 6);
+        strip.as(gtk.Widget).setMarginTop(4);
+        const want: [7]u4 = .{ 1, 2, 3, 4, 5, 6, 14 };
+        for (want) |i| {
+            const c = v.colors[i] orelse continue;
+            const dot = gtk.DrawingArea.new();
+            dot.as(gtk.Widget).setSizeRequest(18, 18);
+            const dcss = gtk.CssProvider.new();
+            var db: [96]u8 = undefined;
+            const drule = std.fmt.bufPrintZ(&db, "drawingarea{{background:#{x:0>2}{x:0>2}{x:0>2};border-radius:5px;}}", .{
+                c.r, c.g, c.b,
+            }) catch continue;
+            _ = dcss.loadFromString(drule);
+            gtk.StyleContext.addProviderForDisplay(
+                (gtk.Widget.getDisplay(dot.as(gtk.Widget))),
+                dcss.as(gtk.StyleProvider),
+                800,
+            );
+            _ = gobject.Object.unref(dcss.as(gobject.Object));
+            strip.append(dot.as(gtk.Widget));
+        }
+        box.append(strip.as(gtk.Widget));
+
+        // Tooltip + id payload for the click handler.
+        btn.as(gtk.Widget).setTooltipText(name_z.ptr);
+        const id_z = std.heap.c_allocator.dupeZ(u8, p.id) catch return null;
+        gobject.Object.setData(btn.as(gobject.Object), "ptyxis-palette-id", @ptrCast(@constCast(id_z.ptr)));
+
+        _ = gobject.signalConnectData(
+            btn.as(gobject.Object),
+            "clicked",
+            @ptrCast(&onPaletteClicked),
+            null,
+            null,
+            .{},
+        );
+
+        return btn;
     }
 
     fn onPaletteClicked(btn: *gtk.Button, _: ?*anyopaque) callconv(.c) void {
@@ -171,7 +197,7 @@ pub const PreferencesWindow = extern struct {
         };
     }
 
-    fn applyPalette(id: []const u8) !void {
+    pub fn applyPalette(id: []const u8) !void {
         const alloc = std.heap.c_allocator;
         // Find the matching palette.
         const all = try palette_mod.loadAll(alloc);
@@ -179,7 +205,8 @@ pub const PreferencesWindow = extern struct {
 
         const p: *const palette_mod.Palette = blk: {
             for (all) |*candidate| {
-                if (std.mem.eql(u8, candidate.id, id)) break :blk candidate;
+                if (std.ascii.eqlIgnoreCase(candidate.id, id)) break :blk candidate;
+                if (std.ascii.eqlIgnoreCase(candidate.name, id)) break :blk candidate;
             }
             return error.PaletteNotFound;
         };
@@ -198,22 +225,22 @@ pub const PreferencesWindow = extern struct {
             const h = try std.fmt.bufPrint(&hex_buf, "#{x:0>2}{x:0>2}{x:0>2}", .{ c.r, c.g, c.b });
             try config_bridge.setKey(alloc, "cursor-color", h);
         }
-        // Palette entries: write a single combined value matching Ghostty's
-        // syntax: `palette = 0=#xxxxxx`. Each Color0..15 is its own assignment.
+        // Palette entries: emit one `palette = N=#hex` line per color via
+        // the list-append helper, which removes any existing palette lines
+        // first.
+        var entry_storage: [16][16]u8 = undefined;
+        var entry_slices: [16][]const u8 = undefined;
+        var n_entries: usize = 0;
         for (v.colors, 0..) |maybe, i| {
             const c = maybe orelse continue;
-            var line_buf: [32]u8 = undefined;
-            const slice = try std.fmt.bufPrint(&line_buf, "{d}=#{x:0>2}{x:0>2}{x:0>2}", .{ i, c.r, c.g, c.b });
-            // Use a key suffix per index so we don't clobber other entries.
-            // Ghostty actually wants `palette = 0=#…` etc. on multiple lines —
-            // our line-editor only supports a single key occurrence, so we
-            // synthesize unique keys here. The user can normalize later.
-            // For now, treat palette as a single key and overwrite repeatedly;
-            // last write wins, so only the final entry survives. This is a
-            // known limitation tracked for the next step.
-            try config_bridge.setKey(alloc, "palette", slice);
+            const slice = try std.fmt.bufPrint(&entry_storage[n_entries], "{d}=#{x:0>2}{x:0>2}{x:0>2}", .{ i, c.r, c.g, c.b });
+            entry_slices[n_entries] = slice;
+            n_entries += 1;
         }
-        log.info("applied palette: {s}", .{p.name});
+        if (n_entries > 0) {
+            try config_bridge.setKeyList(alloc, "palette", entry_slices[0..n_entries]);
+        }
+        log.info("applied palette: {s} ({d} entries)", .{ p.name, n_entries });
     }
 
     const C = Common(Self, Private);
