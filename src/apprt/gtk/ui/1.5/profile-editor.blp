@@ -50,6 +50,30 @@ template $GhosttyPtyxisProfileEditor: Adw.PreferencesWindow {
     icon-name: "font-select-symbolic";
 
     Adw.PreferencesGroup {
+      title: _("Palette");
+
+      ScrolledWindow {
+        hscrollbar-policy: never;
+        min-content-height: 240;
+        max-content-height: 360;
+        propagate-natural-height: true;
+
+        FlowBox palette_flowbox {
+          column-spacing: 9;
+          row-spacing: 9;
+          min-children-per-line: 2;
+          max-children-per-line: 2;
+          selection-mode: none;
+          homogeneous: true;
+          margin-top: 6;
+          margin-bottom: 6;
+          margin-start: 6;
+          margin-end: 6;
+        }
+      }
+    }
+
+    Adw.PreferencesGroup {
       title: _("Font");
 
       Adw.ExpanderRow use_system_font_row {
