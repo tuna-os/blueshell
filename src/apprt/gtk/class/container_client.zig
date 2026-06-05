@@ -46,12 +46,14 @@ pub const ContainerInfo = struct {
     id: [:0]u8,
     provider: [:0]u8,
     display_name: [:0]u8,
+    icon_name: [:0]u8,
 
     pub fn deinit(self: *ContainerInfo, alloc: std.mem.Allocator) void {
         alloc.free(self.object_path);
         alloc.free(self.id);
         alloc.free(self.provider);
         alloc.free(self.display_name);
+        alloc.free(self.icon_name);
     }
 };
 
@@ -174,6 +176,7 @@ pub const Client = struct {
                 info.id,
                 info.provider,
                 info.display_name,
+                info.icon_name,
             );
             defer obj.unref();
             gio.ListStore.append(store, obj.as(gobject.Object));
@@ -415,6 +418,9 @@ pub const Client = struct {
         errdefer self.alloc.free(provider);
         const display_name = try self.dupDictStr(dict, "DisplayName");
         errdefer self.alloc.free(display_name);
+        const icon_name = self.dupDictStr(dict, "IconName") catch
+            try self.alloc.dupeZ(u8, "");
+        errdefer self.alloc.free(icon_name);
 
         const path_dup = try self.alloc.dupeZ(u8, object_path);
 
@@ -423,6 +429,7 @@ pub const Client = struct {
             .id = id,
             .provider = provider,
             .display_name = display_name,
+            .icon_name = icon_name,
         };
     }
 

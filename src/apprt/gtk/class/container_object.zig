@@ -51,6 +51,12 @@ pub const Container = extern struct {
             ?[:0]const u8,
             .{ .default = null, .accessor = C.privateStringFieldAccessor("display_name") },
         );
+        pub const @"icon-name" = gobject.ext.defineProperty(
+            "icon-name",
+            Self,
+            ?[:0]const u8,
+            .{ .default = null, .accessor = C.privateStringFieldAccessor("icon_name") },
+        );
     };
 
     const Private = struct {
@@ -58,6 +64,7 @@ pub const Container = extern struct {
         id: ?[:0]const u8 = null,
         provider: ?[:0]const u8 = null,
         display_name: ?[:0]const u8 = null,
+        icon_name: ?[:0]const u8 = null,
 
         pub var offset: c_int = 0;
     };
@@ -69,6 +76,7 @@ pub const Container = extern struct {
         id: []const u8,
         provider: []const u8,
         display_name: []const u8,
+        icon_name: []const u8,
     ) Allocator.Error!*Self {
         const self = gobject.ext.newInstance(Self, .{});
         errdefer self.unref();
@@ -78,6 +86,7 @@ pub const Container = extern struct {
         priv.id = try alloc.dupeZ(u8, id);
         priv.provider = try alloc.dupeZ(u8, provider);
         priv.display_name = try alloc.dupeZ(u8, display_name);
+        priv.icon_name = try alloc.dupeZ(u8, icon_name);
 
         return self;
     }
@@ -94,6 +103,9 @@ pub const Container = extern struct {
     pub fn getDisplayName(self: *Self) ?[:0]const u8 {
         return self.private().display_name;
     }
+    pub fn getIconName(self: *Self) ?[:0]const u8 {
+        return self.private().icon_name;
+    }
 
     fn finalize(self: *Self) callconv(.c) void {
         const priv = self.private();
@@ -101,6 +113,7 @@ pub const Container = extern struct {
         if (priv.id) |s| alloc.free(s);
         if (priv.provider) |s| alloc.free(s);
         if (priv.display_name) |s| alloc.free(s);
+        if (priv.icon_name) |s| alloc.free(s);
         priv.* = .{};
 
         gobject.Object.virtual_methods.finalize.call(
@@ -127,6 +140,7 @@ pub const Container = extern struct {
                 properties.id,
                 properties.provider,
                 properties.@"display-name",
+                properties.@"icon-name",
             });
         }
     };
