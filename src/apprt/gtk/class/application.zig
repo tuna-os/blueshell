@@ -41,11 +41,15 @@ const Tab = @import("tab.zig").Tab;
 const CloseConfirmationDialog = @import("close_confirmation_dialog.zig").CloseConfirmationDialog;
 const ConfigErrorsDialog = @import("config_errors_dialog.zig").ConfigErrorsDialog;
 const ContainerClient = @import("container_client.zig").Client;
+const PtyxisContainer = @import("container_object.zig").Container;
 
 comptime {
     _ = ContainerClient.spawn;
     _ = ContainerClient.listContainers;
+    _ = ContainerClient.listAsModel;
     _ = ContainerClient.deinit;
+    _ = PtyxisContainer.new;
+    _ = PtyxisContainer.getGObjectType;
 }
 const GlobalShortcuts = @import("global_shortcuts.zig").GlobalShortcuts;
 const OpenURI = @import("../portal.zig").OpenURI;
@@ -1354,22 +1358,24 @@ pub const Application = extern struct {
         };
         defer client.deinit();
 
-        const list = client.listContainers() catch |err| {
-            log.warn("container smoke test: list failed: {s}", .{@errorName(err)});
+        const store = client.listAsModel() catch |err| {
+            log.warn("container smoke test: listAsModel failed: {s}", .{@errorName(err)});
             return;
         };
-        defer {
-            for (list) |*c| {
-                var m = c.*;
-                m.deinit(alloc);
-            }
-            alloc.free(list);
-        }
+        defer _ = gobject.Object.unref(store.as(gobject.Object));
 
-        log.info("container smoke test: found {d} containers", .{list.len});
-        for (list) |c| {
-            log.info("  {s}  id={s} provider={s} display={s}", .{
-                c.object_path, c.id, c.provider, c.display_name,
+        const n = store.as(gio.ListModel).getNItems();
+        log.info("container smoke test: ListStore has {d} items", .{n});
+        var i: c_uint = 0;
+        while (i < n) : (i += 1) {
+            const raw = store.as(gio.ListModel).getItem(i) orelse continue;
+            const obj: *gobject.Object = @ptrCast(@alignCast(raw));
+            defer gobject.Object.unref(obj);
+            const c: *PtyxisContainer = gobject.ext.cast(PtyxisContainer, obj) orelse continue;
+            log.info("  id={s} provider={s} display={s}", .{
+                c.getId() orelse "?",
+                c.getProvider() orelse "?",
+                c.getDisplayName() orelse "?",
             });
         }
     }

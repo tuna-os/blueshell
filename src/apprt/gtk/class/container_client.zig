@@ -16,6 +16,7 @@ const glib = @import("glib");
 const gobject = @import("gobject");
 
 const build_config = @import("../../../build_config.zig");
+const Container = @import("container_object.zig").Container;
 
 const log = std.log.scoped(.ptyxis_agent_client);
 
@@ -148,6 +149,35 @@ pub const Client = struct {
             .subprocess = subprocess,
             .bus = bus,
         };
+    }
+
+    /// List containers as a Gio.ListStore of Container GObjects.
+    /// Caller owns one ref on the returned store.
+    pub fn listAsModel(self: *Client) Error!*gio.ListStore {
+        const store = gio.ListStore.new(Container.getGObjectType());
+        errdefer _ = gobject.Object.unref(store.as(gobject.Object));
+
+        const infos = try self.listContainers();
+        defer {
+            for (infos) |*c| {
+                var m = c.*;
+                m.deinit(self.alloc);
+            }
+            self.alloc.free(infos);
+        }
+
+        for (infos) |info| {
+            const obj = try Container.new(
+                info.object_path,
+                info.id,
+                info.provider,
+                info.display_name,
+            );
+            defer obj.unref();
+            gio.ListStore.append(store, obj.as(gobject.Object));
+        }
+
+        return store;
     }
 
     /// List containers known to the agent. Caller owns the returned slice.
