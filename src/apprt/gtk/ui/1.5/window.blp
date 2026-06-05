@@ -194,8 +194,14 @@ menu split_menu {
   }
 }
 
+// Hamburger menu matches Ptyxis's primary_menu layout. Short and crisp:
+// New Tab / New Window, Show Open Tabs, Fullscreen, Preferences /
+// Shortcuts, About. Ghostty extras (Copy, Paste, Splits, Command
+// Palette, Inspector) are reachable via the right-click context menu
+// and the command palette — they're not in this hamburger to keep the
+// Ptyxis visual identity. Accelerator hints render via the standard
+// gtk-popover-menu rule that picks up the action's primary accel.
 menu main_menu {
-  // Section 1: New things (matches Ptyxis primary_menu top)
   section {
     item {
       label: _("New _Tab");
@@ -208,7 +214,6 @@ menu main_menu {
     }
   }
 
-  // Section 2: Show open tabs
   section {
     item {
       label: _("Show Open Tabs");
@@ -216,7 +221,6 @@ menu main_menu {
     }
   }
 
-  // Section 3: Window state
   section {
     item {
       label: _("Fullscreen");
@@ -231,89 +235,6 @@ menu main_menu {
     }
   }
 
-  // Section 4: Edit (Ghostty extras Ptyxis lacks: copy/paste/clear)
-  section {
-    item {
-      label: _("Copy");
-      action: "win.copy";
-    }
-
-    item {
-      label: _("Paste");
-      action: "win.paste";
-    }
-
-    item {
-      label: _("Clear");
-      action: "win.clear";
-    }
-
-    item {
-      label: _("Reset");
-      action: "win.reset";
-    }
-  }
-
-  // Section 5: Splits (Ghostty extras Ptyxis lacks)
-  section {
-    submenu {
-      label: _("Split");
-
-      item {
-        label: _("Change Title…");
-        action: "win.prompt-surface-title";
-      }
-
-      item {
-        label: _("Split Up");
-        action: "win.split-up";
-      }
-
-      item {
-        label: _("Split Down");
-        action: "win.split-down";
-      }
-
-      item {
-        label: _("Split Left");
-        action: "win.split-left";
-      }
-
-      item {
-        label: _("Split Right");
-        action: "win.split-right";
-      }
-    }
-  }
-
-  // Section 6: Tab management
-  section {
-    item {
-      label: _("Change Tab Title…");
-      action: "win.prompt-tab-title";
-    }
-
-    item {
-      label: _("Close Tab");
-      action: "win.close-tab";
-      target: "this";
-    }
-  }
-
-  // Section 7: Tools (Ghostty extras)
-  section {
-    item {
-      label: _("Command Palette");
-      action: "win.toggle-command-palette";
-    }
-
-    item {
-      label: _("Terminal Inspector");
-      action: "win.toggle-inspector";
-    }
-  }
-
-  // Section 8: App-level (matches Ptyxis primary_menu bottom)
   section {
     item {
       label: _("_Preferences");
@@ -321,26 +242,14 @@ menu main_menu {
     }
 
     item {
-      label: _("Open Configuration");
-      action: "app.open-config";
+      label: _("_Keyboard Shortcuts");
+      action: "win.show-keyboard-shortcuts";
+      hidden-when: "action-disabled";
     }
 
-    item {
-      label: _("Reload Configuration");
-      action: "app.reload-config";
-    }
-  }
-
-  // Section 9: About + Quit
-  section {
     item {
       label: _("_About Ghostty");
       action: "win.about";
-    }
-
-    item {
-      label: _("Quit");
-      action: "app.quit";
     }
   }
 }
