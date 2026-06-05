@@ -292,31 +292,20 @@ pub const Client = struct {
         producer_fd: c_int,
         env: []const [2][]const u8,
     ) Error![:0]u8 {
-        // cwd as ay
-        const cwd_v = glib.Variant.newFromData(
-            glib.VariantType.new("ay"),
-            cwd.ptr,
-            cwd.len,
-            1, // trusted
-            null,
-            null,
-        );
+        // cwd as ay (bytestring, NUL-terminated)
+        const cwd_z = std.heap.c_allocator.dupeZ(u8, cwd) catch return Error.OutOfMemory;
+        defer std.heap.c_allocator.free(cwd_z);
+        const cwd_v = glib.Variant.newBytestring(cwd_z.ptr);
 
-        // argv as aay
+        // argv as aay (each element a bytestring)
         var argv_b: glib.VariantBuilder = undefined;
         const argv_t = glib.VariantType.new("aay");
         defer glib.VariantType.free(argv_t);
         argv_b.init(argv_t);
         for (argv) |s| {
-            const elem = glib.Variant.newFromData(
-                glib.VariantType.new("ay"),
-                s.ptr,
-                s.len,
-                1,
-                null,
-                null,
-            );
-            argv_b.addValue(elem);
+            const s_z = std.heap.c_allocator.dupeZ(u8, s) catch return Error.OutOfMemory;
+            defer std.heap.c_allocator.free(s_z);
+            argv_b.addValue(glib.Variant.newBytestring(s_z.ptr));
         }
 
         // fds as a{uh}: 0,1,2 → producer_fd handle (we'll add it to a

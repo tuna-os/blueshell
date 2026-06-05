@@ -1392,7 +1392,86 @@ pub const Application = extern struct {
                 }
             }
         }
+
+        // Optional: smoke test the full spawn-in-container path.
+        // Set GHOSTTY_PTYXIS_TEST_SPAWN to a container id (e.g. "session"
+        // or a podman name) to drive: CreatePty → Container.Spawn → echo
+        // a sentinel into the slave to prove it's live.
+        if (std.posix.getenv("GHOSTTY_PTYXIS_TEST_SPAWN")) |id| {
+            self.smokeSpawnFlow(id) catch |err| {
+                log.warn("spawn smoke failed: {s}", .{@errorName(err)});
+            };
+        }
     }
+
+    fn smokeSpawnFlow(self: *Self, id: []const u8) !void {
+        const priv = self.private();
+        const store = priv.container_model orelse return error.NoModel;
+        const c_ptr = if (priv.container_client) |*c| c else return error.NoClient;
+
+        // Find container_path by id.
+        const lm = store.as(gio.ListModel);
+        const n = lm.getNItems();
+        var i: c_uint = 0;
+        const container_path: [:0]const u8 = blk: while (i < n) : (i += 1) {
+            const raw = lm.getItem(i) orelse continue;
+            const obj: *gobject.Object = @ptrCast(@alignCast(raw));
+            defer gobject.Object.unref(obj);
+            const c = gobject.ext.cast(PtyxisContainer, obj) orelse continue;
+            const cid = c.getId() orelse continue;
+            if (std.mem.eql(u8, cid, id)) break :blk (c.objectPath() orelse continue);
+        } else return error.ContainerNotFound;
+
+        const master = try c_ptr.createPty();
+        defer std.posix.close(master);
+
+        // Open slave.
+        const Libc = struct {
+            extern "c" fn grantpt(fd: c_int) c_int;
+            extern "c" fn unlockpt(fd: c_int) c_int;
+            extern "c" fn ptsname(fd: c_int) ?[*:0]const u8;
+            extern "c" fn open(path: [*:0]const u8, flags: c_int) c_int;
+        };
+        _ = Libc.grantpt(master);
+        _ = Libc.unlockpt(master);
+        const slave_name = Libc.ptsname(master) orelse return error.PtsName;
+        const slave_fd = Libc.open(slave_name, 2 | 0o400);
+        if (slave_fd < 0) return error.OpenSlave;
+        defer std.posix.close(slave_fd);
+
+        log.info("smoke spawn: container={s} master={d} slave_name={s}", .{
+            container_path, master, slave_name,
+        });
+
+        const argv = [_][]const u8{ "/bin/sh", "-c", "echo PTYXIS_SMOKE_OK > /dev/tty; sleep 0.3" };
+        const cwd = "/";
+        const env = [_][2][]const u8{
+            .{ "TERM", "xterm-256color" },
+            .{ "PATH", "/usr/bin:/bin" },
+        };
+
+        const proc = try c_ptr.spawnInContainer(container_path, cwd, &argv, slave_fd, &env);
+        defer std.heap.c_allocator.free(proc);
+        log.info("smoke spawn: proc={s}", .{proc});
+
+        // Read sentinel back from master. The shell may not have flushed
+        // by the time we get here; retry briefly.
+        var buf: [256]u8 = undefined;
+        const ReadLibc = struct {
+            extern "c" fn read(fd: c_int, buf: [*]u8, count: usize) isize;
+        };
+        var tries: u8 = 0;
+        while (tries < 20) : (tries += 1) {
+            const n_read = ReadLibc.read(master, &buf, buf.len);
+            if (n_read > 0) {
+                log.info("smoke spawn read {d} bytes: {s}", .{ n_read, buf[0..@intCast(n_read)] });
+                return;
+            }
+            std.Thread.sleep(50 * std.time.ns_per_ms);
+        }
+        log.warn("smoke spawn: no output within timeout", .{});
+    }
+
 
     fn startupContainerClient(self: *Self) void {
         const priv = self.private();
@@ -1446,6 +1525,12 @@ pub const Application = extern struct {
     /// agent could not be reached. Caller does NOT own a ref.
     pub fn containerModel(self: *Self) ?*gio.ListStore {
         return self.private().container_model;
+    }
+
+    /// Get the live ContainerClient, or null if the agent never spawned.
+    pub fn containerClient(self: *Self) ?*ContainerClient {
+        const priv = self.private();
+        return if (priv.container_client) |*c| c else null;
     }
 
     /// Configure libxev to use a specific backend.
