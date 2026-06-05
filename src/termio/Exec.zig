@@ -113,7 +113,7 @@ pub fn threadEnter(
         // as a special case in os/flatpak.zig) since the
         // command is on the host.
         .flatpak => null,
-    } else return error.ProcessNotStarted;
+    } else if (self.subprocess.external_master_fd != null) null else return error.ProcessNotStarted;
     errdefer if (process) |*p| p.deinit();
 
     // Track our process start time for abnormal exits
@@ -573,6 +573,13 @@ pub const Config = struct {
 
     rt_pre_exec_info: Command.RtPreExecInfo,
     rt_post_fork_info: Command.RtPostForkInfo,
+
+    /// If set, the subprocess is "adopted": Exec will not fork/exec a
+    /// child or open a new pty. Instead the given master fd is owned by
+    /// this Exec and used for both read and write. The actual child
+    /// process lives outside Ghostty (e.g. spawned by ptyxis-agent in a
+    /// container). Process-exit watching is skipped.
+    external_master_fd: ?Pty.Fd = null,
 };
 
 const Subprocess = struct {
@@ -593,6 +600,10 @@ const Subprocess = struct {
 
     rt_pre_exec_info: Command.RtPreExecInfo,
     rt_post_fork_info: Command.RtPostForkInfo,
+
+    /// See Config.external_master_fd. When non-null, start() adopts this
+    /// fd instead of opening a new pty / forking a child.
+    external_master_fd: ?Pty.Fd = null,
 
     /// Union that represents the running process type.
     const Process = union(enum) {
@@ -868,6 +879,8 @@ const Subprocess = struct {
             .rt_pre_exec_info = cfg.rt_pre_exec_info,
             .rt_post_fork_info = cfg.rt_post_fork_info,
 
+            .external_master_fd = cfg.external_master_fd,
+
             // Should be initialized with initTerminal call.
             .grid_size = .{},
             .screen_size = .{ .width = 1, .height = 1 },
@@ -890,6 +903,30 @@ const Subprocess = struct {
         write: Pty.Fd,
     } {
         assert(self.pty == null and self.process == null);
+
+        // Adopted mode: a master fd was handed to us by an external
+        // spawner (e.g. ptyxis-agent). Skip pty.open + fork; the child
+        // process is already running on the other side of master_fd.
+        if (self.external_master_fd) |master| {
+            // Set initial size on the adopted pty.
+            const ws: ptypkg.winsize = .{
+                .ws_row = @intCast(self.grid_size.rows),
+                .ws_col = @intCast(self.grid_size.columns),
+                .ws_xpixel = @intCast(self.screen_size.width),
+                .ws_ypixel = @intCast(self.screen_size.height),
+            };
+            self.pty = .{
+                .master = master,
+                .slave = -1,
+                .tty_name_buf = undefined,
+                .tty_name = null,
+            };
+            if (self.pty) |*p| p.setSize(ws) catch |err| {
+                log.warn("failed to set size on adopted pty: {}", .{err});
+            };
+            // self.process stays null — there is no Ghostty-owned child.
+            return .{ .read = master, .write = master };
+        }
 
         // This function is funny because on POSIX systems it can
         // fail in the forked process. This is flipped to true if
