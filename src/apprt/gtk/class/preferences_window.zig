@@ -12,6 +12,7 @@ const gresource = @import("../build/gresource.zig");
 const Common = @import("../class.zig").Common;
 const config_bridge = @import("config_bridge.zig");
 const palette_mod = @import("palette.zig");
+const Application = @import("application.zig").Application;
 
 const log = std.log.scoped(.gtk_ptyxis_preferences);
 
@@ -45,6 +46,10 @@ pub const PreferencesWindow = extern struct {
 
     fn init(self: *Self, _: *Class) callconv(.c) void {
         gtk.Widget.initTemplate(self.as(gtk.Widget));
+
+        // Load current values from the in-memory config before wiring
+        // signals so we don't trigger spurious writebacks.
+        loadCurrentValues(self);
 
         // Wire opacity slider → ~/.config/ghostty/config writeback.
         const priv = self.private();
@@ -104,6 +109,33 @@ pub const PreferencesWindow = extern struct {
             null,
             .{},
         );
+    }
+
+    /// Populate row widgets from the Application's current Config.
+    fn loadCurrentValues(self: *Self) void {
+        const priv = self.private();
+        const app = Application.default();
+        const cfg = app.getConfig().get();
+
+        // Opacity.
+        const adj = gtk.Range.getAdjustment(priv.opacity_scale.as(gtk.Range));
+        adj.setValue(cfg.@"background-opacity");
+
+        // Cursor style (block / bar / underline → indices 0 / 1 / 2).
+        const cs_idx: c_uint = switch (cfg.@"cursor-style") {
+            .block, .block_hollow => 0,
+            .bar => 1,
+            .underline => 2,
+        };
+        priv.cursor_shape_row.setSelected(cs_idx);
+
+        // Cursor blink (true → "On" index 1, false → "Off" index 2, null → "Follow System" index 0).
+        const blink_idx: c_uint = if (cfg.@"cursor-style-blink") |b| (if (b) 1 else 2) else 0;
+        priv.cursor_blinking_row.setSelected(blink_idx);
+
+        // Scrollback.
+        const sb_adj = adw.SpinRow.getAdjustment(priv.scrollback_limit_row);
+        sb_adj.setValue(@floatFromInt(@min(cfg.@"scrollback-limit", std.math.maxInt(u32))));
     }
 
     fn cursorShapeChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
