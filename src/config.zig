@@ -34,6 +34,7 @@ pub const MouseShiftCapture = Config.MouseShiftCapture;
 pub const MouseScrollMultiplier = Config.MouseScrollMultiplier;
 pub const NonNativeFullscreen = Config.NonNativeFullscreen;
 pub const Fullscreen = Config.Fullscreen;
+pub const ExitAction = Config.ExitAction;
 pub const RepeatableCodepointMap = Config.RepeatableCodepointMap;
 pub const RepeatableFontVariation = Config.RepeatableFontVariation;
 pub const RepeatableString = Config.RepeatableString;

@@ -92,7 +92,7 @@ pub const ProfileEditor = extern struct {
             .shell => |s| s,
             .direct => |arr| if (arr.len > 0) arr[0] else "",
         } else "";
-        const cmd_z = try std.fmt.allocPrintZ(alloc, "{s}", .{cmd});
+        const cmd_z = try std.fmt.allocPrintSentinel(alloc, u8, "{s}", .{cmd});
         defer alloc.free(cmd_z);
         priv.command_entry.as(gtk.Editable).setText(cmd_z);
 
@@ -109,7 +109,7 @@ pub const ProfileEditor = extern struct {
 
         // Title Prefix (Custom Title).
         const title = cfg.title orelse "";
-        const title_z = try std.fmt.allocPrintZ(alloc, "{s}", .{title});
+        const title_z = try std.fmt.allocPrintSentinel(alloc, u8, "{s}", .{title});
         defer alloc.free(title_z);
         priv.title_prefix_row.as(gtk.Editable).setText(title_z);
 
@@ -120,7 +120,7 @@ pub const ProfileEditor = extern struct {
         // Font Button.
         const family_slice = if (cfg.@"font-family".list.items.len > 0) cfg.@"font-family".list.items[0] else "Monospace";
         const font_size = cfg.@"font-size";
-        const font_str = try std.fmt.allocPrintZ(alloc, "{s} {d}", .{ family_slice, font_size });
+        const font_str = try std.fmt.allocPrintSentinel(alloc, u8, "{s} {d}", .{ family_slice, font_size });
         defer alloc.free(font_str);
 
         const PangoLibc = struct {
