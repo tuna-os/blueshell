@@ -1955,8 +1955,12 @@ pub const Window = extern struct {
 
     /// Open a new tab inside a named container. The container_id is what
     /// org.gnome.Ptyxis.Container's "Id" property returns (or "host" /
-    /// empty for the host system). PTY routing through ptyxis-agent
-    /// lands in a later step; for now we log and create a regular tab.
+    /// empty for the host system). For "host" we fall through to the
+    /// normal new-tab path. For a real container we drive the agent:
+    /// CreatePty → Container.Spawn → adopt the master fd in a Ghostty
+    /// Surface. The Surface-level adoption is wired separately; this
+    /// function exercises the agent RPCs and falls through to the
+    /// normal new-tab so the user still gets a tab.
     fn actionNewTabInContainer(
         _: *gio.SimpleAction,
         parameter_: ?*glib.Variant,
@@ -1969,8 +1973,105 @@ pub const Window = extern struct {
         var len: usize = 0;
         const id_ptr = glib.Variant.getString(parameter, &len);
         const id = id_ptr[0..len];
-        log.info("new-tab-in-container: id={s} (TODO: route PTY through agent)", .{id});
+
+        if (std.mem.eql(u8, id, "host")) {
+            self.performBindingAction(.new_tab);
+            return;
+        }
+
+        spawnInContainerById(self, id) catch |err| {
+            log.warn("spawnInContainerById({s}) failed: {s}", .{ id, @errorName(err) });
+        };
         self.performBindingAction(.new_tab);
+    }
+
+    /// Test helper: invoke the agent-spawn path directly with a given id.
+    pub fn smokeSpawnInContainer(self: *Self, id: []const u8) void {
+        spawnInContainerById(self, id) catch |err| {
+            log.warn("smokeSpawnInContainer({s}) failed: {s}", .{ id, @errorName(err) });
+        };
+    }
+
+    fn spawnInContainerById(self: *Self, id: []const u8) !void {
+        const app = Application.default();
+        const store = app.containerModel() orelse return error.NoAgent;
+        const client_ptr = app.containerClient() orelse return error.NoAgent;
+
+        // Find the container object-path by id.
+        const list_model = store.as(gio.ListModel);
+        const n = list_model.getNItems();
+        var i: c_uint = 0;
+        const container_path: [:0]const u8 = blk: while (i < n) : (i += 1) {
+            const raw = list_model.getItem(i) orelse continue;
+            const obj: *gobject.Object = @ptrCast(@alignCast(raw));
+            defer gobject.Object.unref(obj);
+            const c = gobject.ext.cast(PtyxisContainer, obj) orelse continue;
+            const cid = c.getId() orelse continue;
+            if (std.mem.eql(u8, cid, id)) {
+                const path = c.objectPath() orelse continue;
+                break :blk path;
+            }
+        } else return error.ContainerNotFound;
+
+        const master_fd = try client_ptr.createPty();
+        log.info("agent CreatePty master_fd={d} for container {s}", .{ master_fd, container_path });
+
+        // Open the producer (slave) side via libc grantpt/unlockpt/ptsname/open.
+        // The agent unlocked it for us but we still need a slave fd to pass.
+        const PtsLibc = struct {
+            extern "c" fn grantpt(fd: c_int) c_int;
+            extern "c" fn unlockpt(fd: c_int) c_int;
+            extern "c" fn ptsname(fd: c_int) ?[*:0]const u8;
+            extern "c" fn open(path: [*:0]const u8, flags: c_int) c_int;
+        };
+        _ = PtsLibc.grantpt(master_fd);
+        _ = PtsLibc.unlockpt(master_fd);
+        const slave_name = PtsLibc.ptsname(master_fd) orelse return error.PtsName;
+        const slave_path = std.mem.span(slave_name);
+        // O_RDWR | O_NOCTTY
+        const O_RDWR: c_int = 2;
+        const O_NOCTTY: c_int = 0o400;
+        const slave_fd_raw = PtsLibc.open(slave_name, O_RDWR | O_NOCTTY);
+        if (slave_fd_raw < 0) return error.OpenSlave;
+        const slave_fd: c_int = slave_fd_raw;
+        defer std.posix.close(slave_fd);
+
+        log.info("opened slave: {s} fd={d}", .{ slave_path, slave_fd });
+
+        // Build argv: prefer the shell from $SHELL, default /bin/bash.
+        const shell = std.posix.getenv("SHELL") orelse "/bin/bash";
+        const argv = [_][]const u8{shell};
+        const cwd = std.posix.getenv("HOME") orelse "/";
+
+        // Minimal env: TERM + HOME + USER + PATH.
+        const term_v = std.posix.getenv("TERM") orelse "xterm-256color";
+        const home_v = std.posix.getenv("HOME") orelse "/";
+        const user_v = std.posix.getenv("USER") orelse "user";
+        const path_v = std.posix.getenv("PATH") orelse "/usr/bin:/bin";
+        const env = [_][2][]const u8{
+            .{ "TERM", term_v },
+            .{ "HOME", home_v },
+            .{ "USER", user_v },
+            .{ "PATH", path_v },
+        };
+
+        const proc_path = try client_ptr.spawnInContainer(
+            container_path,
+            cwd,
+            &argv,
+            slave_fd,
+            &env,
+        );
+        defer self.alloc().free(proc_path);
+
+        log.info("Container.Spawn ok: proc_path={s}", .{proc_path});
+        // TODO: hand master_fd to a Ghostty Surface. For now, close it
+        // (the spawned shell will exit when its parent end closes).
+        std.posix.close(master_fd);
+    }
+
+    fn alloc(_: *Self) std.mem.Allocator {
+        return std.heap.c_allocator;
     }
 
     fn actionPromptContextTabTitle(
