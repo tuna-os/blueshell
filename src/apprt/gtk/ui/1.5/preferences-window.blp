@@ -22,35 +22,31 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
       title: _("Palette");
 
       [header-suffix]
-      Button {
+      Button show_all_palettes_button {
         styles [
           "flat",
         ]
 
-        Adw.ButtonContent {
+        Adw.ButtonContent show_all_palettes_content {
           icon-name: "pan-down-symbolic";
           label: _("Show All Palettes");
         }
       }
 
-      ScrolledWindow {
-        hscrollbar-policy: never;
-        min-content-height: 320;
-        max-content-height: 480;
-        propagate-natural-height: true;
-
-        FlowBox palette_flowbox {
-          column-spacing: 9;
-          row-spacing: 9;
-          min-children-per-line: 2;
-          max-children-per-line: 2;
-          selection-mode: none;
-          homogeneous: true;
-          margin-top: 6;
-          margin-bottom: 6;
-          margin-start: 6;
-          margin-end: 6;
-        }
+      // Default: 11 curated palettes, 3 columns, no scroll.
+      // When "Show All" is pressed this flowbox is replaced by a
+      // scrollable one containing all 244 palettes.
+      FlowBox palette_flowbox {
+        column-spacing: 9;
+        row-spacing: 9;
+        min-children-per-line: 3;
+        max-children-per-line: 3;
+        selection-mode: none;
+        homogeneous: true;
+        margin-top: 6;
+        margin-bottom: 6;
+        margin-start: 6;
+        margin-end: 6;
       }
     }
 

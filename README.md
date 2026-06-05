@@ -22,9 +22,18 @@ App ID: `dev.hanthor.GhosttyPtyxis`
 
 ## Installation
 
-### Flatpak (recommended)
+### Flatpak — one-line install (recommended)
 
-A Flatpak manifest is at `flatpak/dev.hanthor.GhosttyPtyxis.yml`. It bundles `ptyxis-agent` for container support.
+CI builds a fresh Flatpak bundle on every commit to `ptyxis-port`. Install the latest:
+
+```sh
+curl -L https://nightly.link/hanthor/ghostty-ptyxis/workflows/ghostty-ptyxis/ptyxis-port/GhosttyPtyxis.flatpak.zip \
+  -o GhosttyPtyxis.flatpak.zip \
+  && unzip -o GhosttyPtyxis.flatpak.zip \
+  && flatpak install --user --reinstall GhosttyPtyxis.flatpak
+```
+
+### Flatpak — build from source
 
 ```sh
 flatpak-builder --install --user build-dir flatpak/dev.hanthor.GhosttyPtyxis.yml

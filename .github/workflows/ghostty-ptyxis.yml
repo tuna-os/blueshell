@@ -1,0 +1,28 @@
+name: GhosttyPtyxis Flatpak
+
+on:
+  push:
+    branches: [ptyxis-port]
+  workflow_dispatch:
+
+jobs:
+  flatpak:
+    name: Build Flatpak
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48
+      options: --privileged
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build Flatpak bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: GhosttyPtyxis.flatpak
+          manifest-path: flatpak/dev.hanthor.GhosttyPtyxis.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+          upload-artifact: true
