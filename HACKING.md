@@ -1,3 +1,89 @@
+# Developing GhosttyPtyxis
+
+This document covers building and hacking on **GhosttyPtyxis** (the `ptyxis-port` branch). The second half of this file is the upstream Ghostty developer guide, which applies equally here for anything not covered in the GhosttyPtyxis section.
+
+## Quick start (Fedora / Silverblue)
+
+GhosttyPtyxis builds inside a Fedora 43 toolbox. The host needs Zig 0.15.x on PATH.
+
+```sh
+# One-time: create the build toolbox
+toolbox create --image registry.fedoraproject.org/fedora-toolbox:43 finupdate
+toolbox enter finupdate
+sudo dnf install blueprint-compiler gtk4-layer-shell-devel libadwaita-devel \
+    meson gtk4-devel gobject-introspection-devel
+
+# Zig 0.15.x (run on the host — $HOME is shared)
+curl -L https://ziglang.org/download/0.15.0/zig-x86_64-linux-0.15.0.tar.xz | tar xJ -C ~/.local/
+ln -sf ~/.local/zig-x86_64-linux-0.15.0/zig ~/.local/bin/zig
+```
+
+Build the GTK app:
+
+```sh
+toolbox run --container finupdate bash -c "zig build -Dapp-runtime=gtk"
+# Debug binary → zig-out/bin/ghostty
+```
+
+Run it:
+
+```sh
+toolbox run --container finupdate zig-out/bin/ghostty
+```
+
+For release builds add `-Doptimize=ReleaseFast`.
+
+## Source layout (ptyxis-specific files)
+
+All Ptyxis UI code lives under `src/apprt/gtk/`:
+
+| Path | Purpose |
+| --- | --- |
+| `class/preferences_window.zig` | Full preferences window — palette, font, cursor, behavior, shortcuts, profiles |
+| `class/profile_editor.zig` | Per-profile editor dialog |
+| `class/profile_store.zig` | Profile CRUD — snapshot files in `~/.config/ghostty/profiles/` |
+| `class/config_bridge.zig` | Read/write individual keys in a Ghostty config file |
+| `class/palette.zig` | Palette data model; `palettes_embed.zig` embeds the Gogh JSON at build time |
+| `class/container_client.zig` | D-Bus ContainerClient — ListContainers / CreatePty / Spawn |
+| `class/container_object.zig` | GObject wrapper for a discovered container |
+| `class/window.zig` | Hamburger menu, theme picker, zoom, container new-tab picker |
+| `ui/1.5/preferences-window.blp` | Blueprint for the preferences window |
+| `ui/1.5/profile-editor.blp` | Blueprint for the profile editor |
+| `third_party/ptyxis-agent/` | Bundled ptyxis-agent (standalone meson build) |
+
+## Building ptyxis-agent
+
+`ptyxis-agent` is vendored as a standalone meson subproject:
+
+```sh
+cd third_party/ptyxis-agent
+meson setup build
+meson compile -C build
+# Binary → third_party/ptyxis-agent/build/ptyxis-agent
+```
+
+The GTK app auto-resolves it from `PTYXIS_AGENT`, `/app/libexec/ptyxis-agent`, or a sibling path.
+
+## Flatpak build
+
+```sh
+flatpak-builder --install --user build-dir flatpak/dev.hanthor.GhosttyPtyxis.yml
+```
+
+The manifest bundles ptyxis-agent at `/app/libexec/ptyxis-agent`.
+
+## Adding new preferences
+
+1. Add the row to `ui/1.5/preferences-window.blp` (or `profile-editor.blp` for per-profile).
+2. Add a `*adw.SwitchRow` / `*adw.ComboRow` / `*gtk.Scale` field to the `Private` struct.
+3. Add a `bindTemplateChildPrivate("row_name", .{})` call in `Class.init`.
+4. Load the current value in `loadCurrentValues` from `app.getConfig().get()`.
+5. Wire a signal handler in `init` that calls `config_bridge.setKey(..., null)` and `Application.default().triggerReload()`.
+
+For profile-specific settings, write to `priv.profile_path` instead of `null`, and call `self.syncActiveProfile()` instead of `triggerReload()`.
+
+---
+
 # Developing Ghostty
 
 This document describes the technical details behind Ghostty's development.
