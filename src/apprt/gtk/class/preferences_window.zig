@@ -30,6 +30,11 @@ pub const PreferencesWindow = extern struct {
     const Private = struct {
         opacity_scale: *gtk.Scale,
         palette_flowbox: *gtk.FlowBox,
+        cursor_shape_row: *adw.ComboRow,
+        cursor_blinking_row: *adw.ComboRow,
+        audible_bell_row: *adw.SwitchRow,
+        bold_is_bright_row: *adw.SwitchRow,
+        scrollback_limit_row: *adw.SpinRow,
 
         pub var offset: c_int = 0;
     };
@@ -56,6 +61,97 @@ pub const PreferencesWindow = extern struct {
         // Populate palette flowbox.
         populatePalettes(priv.palette_flowbox) catch |err| {
             log.warn("populatePalettes failed: {s}", .{@errorName(err)});
+        };
+
+        // Behavior + cursor rows: write to config on change.
+        _ = gobject.signalConnectData(
+            priv.cursor_shape_row.as(gobject.Object),
+            "notify::selected",
+            @ptrCast(&cursorShapeChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.cursor_blinking_row.as(gobject.Object),
+            "notify::selected",
+            @ptrCast(&cursorBlinkingChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.audible_bell_row.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&audibleBellChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.bold_is_bright_row.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&boldIsBrightChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            adw.SpinRow.getAdjustment(priv.scrollback_limit_row).as(gobject.Object),
+            "value-changed",
+            @ptrCast(&scrollbackLimitChanged),
+            self,
+            null,
+            .{},
+        );
+    }
+
+    fn cursorShapeChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const i = row.getSelected();
+        const value: []const u8 = switch (i) {
+            0 => "block",
+            1 => "bar",
+            2 => "underline",
+            else => return,
+        };
+        config_bridge.setKey(std.heap.c_allocator, "cursor-style", value) catch |err| {
+            log.warn("cursor-style write: {s}", .{@errorName(err)});
+        };
+    }
+
+    fn cursorBlinkingChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const i = row.getSelected();
+        const value: []const u8 = switch (i) {
+            0 => "true", // Follow System ≈ default on
+            1 => "true",
+            2 => "false",
+            else => return,
+        };
+        config_bridge.setKey(std.heap.c_allocator, "cursor-style-blink", value) catch |err| {
+            log.warn("cursor-style-blink write: {s}", .{@errorName(err)});
+        };
+    }
+
+    fn audibleBellChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const v: []const u8 = if (row.getActive() != 0) "true" else "false";
+        config_bridge.setKey(std.heap.c_allocator, "audible-bell", v) catch |err| {
+            log.warn("audible-bell write: {s}", .{@errorName(err)});
+        };
+    }
+
+    fn boldIsBrightChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const v: []const u8 = if (row.getActive() != 0) "true" else "false";
+        config_bridge.setKey(std.heap.c_allocator, "bold-is-bright", v) catch |err| {
+            log.warn("bold-is-bright write: {s}", .{@errorName(err)});
+        };
+    }
+
+    fn scrollbackLimitChanged(adj: *gtk.Adjustment, _: *Self) callconv(.c) void {
+        const v = adj.getValue();
+        var buf: [32]u8 = undefined;
+        const slice = std.fmt.bufPrint(&buf, "{d:.0}", .{v}) catch return;
+        config_bridge.setKey(std.heap.c_allocator, "scrollback-limit", slice) catch |err| {
+            log.warn("scrollback-limit write: {s}", .{@errorName(err)});
         };
     }
 
@@ -265,6 +361,11 @@ pub const PreferencesWindow = extern struct {
             );
             class.bindTemplateChildPrivate("opacity_scale", .{});
             class.bindTemplateChildPrivate("palette_flowbox", .{});
+            class.bindTemplateChildPrivate("cursor_shape_row", .{});
+            class.bindTemplateChildPrivate("cursor_blinking_row", .{});
+            class.bindTemplateChildPrivate("audible_bell_row", .{});
+            class.bindTemplateChildPrivate("bold_is_bright_row", .{});
+            class.bindTemplateChildPrivate("scrollback_limit_row", .{});
         }
 
         pub const as = C.Class.as;
