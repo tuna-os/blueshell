@@ -2004,14 +2004,19 @@ pub const Window = extern struct {
         const priv = self.private();
         if (priv.tab_view.getSelectedPage()) |page| {
             if (title) |t| {
-                // Setting page.title alone loses to the tab→page title
-                // binding (which sources the surface's terminal title).
-                // Tab.setTitleOverride sits at the top of the
-                // closureComputedTitle priority chain so the container
-                // name sticks until the user explicitly renames.
+                // Ptyxis-style title prefix: shell-supplied OSC title
+                // appears AFTER the container name, e.g. "myctn · bash".
+                // We compose the prefix with " · " so the shell's title
+                // looks attached.
                 const child = page.getChild();
                 if (gobject.ext.cast(Tab, child)) |tab_obj| {
-                    tab_obj.setTitleOverride(t);
+                    var buf: [128]u8 = undefined;
+                    const composed = std.fmt.bufPrintZ(
+                        &buf,
+                        "{s} · ",
+                        .{t},
+                    ) catch t;
+                    tab_obj.setTitlePrefix(composed);
                 }
                 page.setTitle(t.ptr);
             }

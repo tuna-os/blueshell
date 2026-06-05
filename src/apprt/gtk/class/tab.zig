@@ -139,6 +139,18 @@ pub const Tab = extern struct {
                 },
             );
         };
+        pub const @"title-prefix" = struct {
+            pub const name = "title-prefix";
+            const impl = gobject.ext.defineProperty(
+                name,
+                Self,
+                ?[:0]const u8,
+                .{
+                    .default = null,
+                    .accessor = C.privateStringFieldAccessor("title_prefix"),
+                },
+            );
+        };
     };
 
     pub const signals = struct {
@@ -164,6 +176,11 @@ pub const Tab = extern struct {
 
         /// The manually overridden title from `promptTabTitle`.
         title_override: ?[:0]const u8 = null,
+
+        /// Ptyxis-style title prefix: prepended to the computed title
+        /// (e.g. container name " · "). Unlike title_override this
+        /// composes with the shell's OSC title rather than replacing it.
+        title_prefix: ?[:0]const u8 = null,
 
         /// The tooltip of this tab. This is usually bound to the active surface.
         tooltip: ?[:0]const u8 = null,
@@ -259,6 +276,18 @@ pub const Tab = extern struct {
         priv.title_override = null;
         if (title) |v| priv.title_override = glib.ext.dupeZ(u8, v);
         self.as(gobject.Object).notifyByPspec(properties.@"title-override".impl.param_spec);
+    }
+
+    /// Ptyxis-style title prefix. Prepended to the computed title in
+    /// closureComputedTitle. Used by the container-spawn flow to mark
+    /// a tab as belonging to a specific container without suppressing
+    /// the shell's OSC 1/2 title updates.
+    pub fn setTitlePrefix(self: *Self, prefix: ?[:0]const u8) void {
+        const priv = self.private();
+        if (priv.title_prefix) |v| glib.free(@ptrCast(@constCast(v)));
+        priv.title_prefix = null;
+        if (prefix) |v| priv.title_prefix = glib.ext.dupeZ(u8, v);
+        self.as(gobject.Object).notifyByPspec(properties.@"title-prefix".impl.param_spec);
     }
     fn titleDialogSet(
         _: *TitleDialog,
@@ -483,6 +512,7 @@ pub const Tab = extern struct {
         terminal_: ?[*:0]const u8,
         surface_override_: ?[*:0]const u8,
         tab_override_: ?[*:0]const u8,
+        tab_prefix_: ?[*:0]const u8,
         zoomed_: c_int,
         bell_ringing_: c_int,
         _: *gobject.ParamSpec,
@@ -493,6 +523,8 @@ pub const Tab = extern struct {
         // Our plain title is the manually tab overridden title if it exists,
         // otherwise the overridden title if it exists, otherwise
         // the terminal title if it exists, otherwise a default string.
+        // A non-null tab_prefix (Ptyxis-style) is prepended UNLESS a
+        // tab_override is present (override fully replaces).
         const plain = plain: {
             const default = "Ghostty";
             const config_title: ?[*:0]const u8 = title: {
@@ -531,6 +563,15 @@ pub const Tab = extern struct {
             buf.writer.writeAll("🔍 ") catch {};
         }
 
+        // Ptyxis-style title prefix (e.g. container name " · ").
+        // Skipped when tab_override is set — an explicit user title fully
+        // replaces; prefix would be redundant or confusing.
+        if (tab_override_ == null) {
+            if (tab_prefix_) |pfx| {
+                buf.writer.writeAll(std.mem.span(pfx)) catch {};
+            }
+        }
+
         buf.writer.writeAll(plain) catch return glib.ext.dupeZ(u8, plain);
         return glib.ext.dupeZ(u8, buf.written());
     }
@@ -566,6 +607,7 @@ pub const Tab = extern struct {
                 properties.@"surface-tree".impl,
                 properties.title.impl,
                 properties.@"title-override".impl,
+                properties.@"title-prefix".impl,
                 properties.tooltip.impl,
             });
 
