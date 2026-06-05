@@ -203,6 +203,45 @@ menu split_menu {
 // gtk-popover-menu rule that picks up the action's primary accel.
 menu main_menu {
   section {
+    label: _("Theme");
+
+    item {
+      label: _("Follow System");
+      action: "win.set-theme";
+      target: "auto";
+    }
+
+    item {
+      label: _("Light");
+      action: "win.set-theme";
+      target: "light";
+    }
+
+    item {
+      label: _("Dark");
+      action: "win.set-theme";
+      target: "dark";
+    }
+  }
+
+  section {
+    item {
+      label: _("Zoom In");
+      action: "win.zoom-in";
+    }
+
+    item {
+      label: _("Zoom Out");
+      action: "win.zoom-out";
+    }
+
+    item {
+      label: _("Reset Zoom");
+      action: "win.zoom-reset";
+    }
+  }
+
+  section {
     item {
       label: _("New _Tab");
       action: "win.new-tab";

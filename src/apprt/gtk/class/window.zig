@@ -386,6 +386,10 @@ pub const Window = extern struct {
             // TODO: accept the surface that toggled the command palette
             .init("toggle-command-palette", actionToggleCommandPalette, null),
             .init("toggle-inspector", actionToggleInspector, null),
+            .init("set-theme", actionSetTheme, s_variant_type),
+            .init("zoom-in", actionZoomIn, null),
+            .init("zoom-out", actionZoomOut, null),
+            .init("zoom-reset", actionZoomReset, null),
         };
 
         ext.actions.add(Self, self, &actions);
@@ -2079,6 +2083,56 @@ pub const Window = extern struct {
 
     fn alloc(_: *Self) std.mem.Allocator {
         return std.heap.c_allocator;
+    }
+
+    fn actionSetTheme(
+        _: *gio.SimpleAction,
+        parameter: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        _ = self;
+        const p = parameter orelse return;
+        var len: usize = 0;
+        const s_ptr = glib.Variant.getString(p, &len);
+        const s = s_ptr[0..len];
+
+        const value: []const u8 = if (std.mem.eql(u8, s, "auto"))
+            "auto"
+        else if (std.mem.eql(u8, s, "light"))
+            "light"
+        else if (std.mem.eql(u8, s, "dark"))
+            "dark"
+        else
+            return;
+
+        const config_bridge = @import("config_bridge.zig");
+        config_bridge.setKey(std.heap.c_allocator, "window-theme", value) catch |err| {
+            log.warn("window-theme write: {s}", .{@errorName(err)});
+        };
+    }
+
+    fn actionZoomIn(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        self.performBindingAction(.{ .increase_font_size = 1.0 });
+    }
+
+    fn actionZoomOut(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        self.performBindingAction(.{ .decrease_font_size = 1.0 });
+    }
+
+    fn actionZoomReset(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        self.performBindingAction(.{ .reset_font_size = {} });
     }
 
     fn actionPromptContextTabTitle(
