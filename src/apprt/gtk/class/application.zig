@@ -248,6 +248,11 @@ pub const Application = extern struct {
         /// Cleared on consume so it never leaks into an unrelated surface.
         pending_external_master_fd: ?c_int = null,
 
+        /// Display name + symbolic icon name to apply to the next tab
+        /// created during the container-spawn flow. Cleared on consume.
+        pending_container_title: ?[:0]const u8 = null,
+        pending_container_icon: ?[:0]const u8 = null,
+
         pub var offset: c_int = 0;
     };
 
@@ -1585,6 +1590,41 @@ pub const Application = extern struct {
         const fd = priv.pending_external_master_fd;
         priv.pending_external_master_fd = null;
         return fd;
+    }
+
+    /// Stash title + icon-name for the next tab created during the
+    /// container-spawn flow. Strings are dup'd with c_allocator. Either
+    /// argument may be empty to clear.
+    pub fn setPendingContainerTabMetadata(
+        self: *Self,
+        title: []const u8,
+        icon: []const u8,
+    ) void {
+        const priv = self.private();
+        if (priv.pending_container_title) |s| std.heap.c_allocator.free(s);
+        if (priv.pending_container_icon) |s| std.heap.c_allocator.free(s);
+        priv.pending_container_title = null;
+        priv.pending_container_icon = null;
+        if (title.len > 0) {
+            priv.pending_container_title = std.heap.c_allocator.dupeZ(u8, title) catch null;
+        }
+        if (icon.len > 0) {
+            priv.pending_container_icon = std.heap.c_allocator.dupeZ(u8, icon) catch null;
+        }
+    }
+
+    pub fn takePendingContainerTabTitle(self: *Self) ?[:0]const u8 {
+        const priv = self.private();
+        const t = priv.pending_container_title;
+        priv.pending_container_title = null;
+        return t;
+    }
+
+    pub fn takePendingContainerTabIcon(self: *Self) ?[:0]const u8 {
+        const priv = self.private();
+        const i = priv.pending_container_icon;
+        priv.pending_container_icon = null;
+        return i;
     }
 
     /// Configure libxev to use a specific backend.

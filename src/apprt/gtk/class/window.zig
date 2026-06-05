@@ -1992,6 +1992,24 @@ pub const Window = extern struct {
         // Master fd is now stashed on Application; the next surface that
         // spins up will adopt it. Trigger the new tab.
         self.performBindingAction(.new_tab);
+
+        // Apply container title + icon to the freshly-created TabPage
+        // (which becomes the selected page after newTabPage).
+        const app2 = Application.default();
+        const title = app2.takePendingContainerTabTitle();
+        const icon = app2.takePendingContainerTabIcon();
+        defer if (title) |t| std.heap.c_allocator.free(t);
+        defer if (icon) |i| std.heap.c_allocator.free(i);
+
+        const priv = self.private();
+        if (priv.tab_view.getSelectedPage()) |page| {
+            if (title) |t| page.setTitle(t.ptr);
+            if (icon) |i| {
+                const themed = gio.ThemedIcon.new(i.ptr);
+                defer _ = gobject.Object.unref(themed.as(gobject.Object));
+                page.setIcon(themed.as(gio.Icon));
+            }
+        }
     }
 
     /// Test helper: invoke the agent-spawn path directly with a given id.
@@ -2006,24 +2024,30 @@ pub const Window = extern struct {
         const store = app.containerModel() orelse return error.NoAgent;
         const client_ptr = app.containerClient() orelse return error.NoAgent;
 
-        // Find the container object-path by id.
+        // Find the container by id; capture object_path + display + icon.
         const list_model = store.as(gio.ListModel);
         const n = list_model.getNItems();
         var i: c_uint = 0;
-        const container_path: [:0]const u8 = blk: while (i < n) : (i += 1) {
+        var container_path: ?[:0]const u8 = null;
+        var display_name: []const u8 = "";
+        var icon_name: []const u8 = "";
+        while (i < n) : (i += 1) {
             const raw = list_model.getItem(i) orelse continue;
             const obj: *gobject.Object = @ptrCast(@alignCast(raw));
             defer gobject.Object.unref(obj);
             const c = gobject.ext.cast(PtyxisContainer, obj) orelse continue;
             const cid = c.getId() orelse continue;
             if (std.mem.eql(u8, cid, id)) {
-                const path = c.objectPath() orelse continue;
-                break :blk path;
+                container_path = c.objectPath();
+                if (c.getDisplayName()) |d| display_name = d;
+                if (c.getIconName()) |n_| icon_name = n_;
+                break;
             }
-        } else return error.ContainerNotFound;
+        }
+        const cpath = container_path orelse return error.ContainerNotFound;
 
         const master_fd = try client_ptr.createPty();
-        log.info("agent CreatePty master_fd={d} for container {s}", .{ master_fd, container_path });
+        log.info("agent CreatePty master_fd={d} for container {s}", .{ master_fd, cpath });
 
         // Open the producer (slave) side via libc grantpt/unlockpt/ptsname/open.
         // The agent unlocked it for us but we still need a slave fd to pass.
@@ -2065,7 +2089,7 @@ pub const Window = extern struct {
         };
 
         const proc_path = try client_ptr.spawnInContainer(
-            container_path,
+            cpath,
             cwd,
             &argv,
             slave_fd,
@@ -2079,6 +2103,9 @@ pub const Window = extern struct {
         // initialize (triggered by performBindingAction(.new_tab))
         // adopts it instead of forking a child of its own.
         app.setPendingExternalMasterFd(master_fd);
+        // Also stash the title + icon so the new tab page can identify
+        // itself as a container (matches Ptyxis behavior).
+        app.setPendingContainerTabMetadata(display_name, icon_name);
     }
 
     fn alloc(_: *Self) std.mem.Allocator {
