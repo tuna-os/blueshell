@@ -57,6 +57,19 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
     Adw.PreferencesGroup {
       title: _("Window");
 
+      Adw.ComboRow window_theme_row {
+        title: _("Theme");
+
+        model: StringList {
+          strings [
+            _("Auto"),
+            _("System"),
+            _("Light"),
+            _("Dark"),
+          ]
+        };
+      }
+
       Adw.ActionRow {
         title: _("Transparency");
         subtitle: _("Reduces the opacity of the background window");
@@ -84,6 +97,11 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
             value: 1.0;
           };
         }
+      }
+
+      Adw.SwitchRow background_blur_row {
+        title: _("Background Blur");
+        subtitle: _("Blur content visible through a transparent background");
       }
     }
 
@@ -115,6 +133,11 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
             };
           }
         }
+      }
+
+      Adw.SwitchRow font_thicken_row {
+        title: _("Thicken Fonts");
+        subtitle: _("Apply a thickening filter to improve legibility on low-DPI displays");
       }
     }
 
@@ -173,6 +196,28 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
           ]
         };
       }
+
+      Adw.ActionRow {
+        title: _("Cursor Opacity");
+        activatable-widget: cursor_opacity_scale;
+
+        Scale cursor_opacity_scale {
+          orientation: horizontal;
+          width-request: 200;
+          valign: center;
+          draw-value: true;
+          value-pos: right;
+          digits: 2;
+
+          adjustment: Adjustment {
+            lower: 0.0;
+            upper: 1.0;
+            step-increment: 0.05;
+            page-increment: 0.25;
+            value: 1.0;
+          };
+        }
+      }
     }
   }
 
@@ -190,6 +235,46 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
           strings [
             _("Next"),
             _("Last"),
+          ]
+        };
+      }
+
+      Adw.ComboRow tab_bar_row {
+        title: _("Tab Bar");
+
+        model: StringList {
+          strings [
+            _("Auto"),
+            _("Always"),
+            _("Never"),
+          ]
+        };
+      }
+
+      Adw.ComboRow tabs_location_row {
+        title: _("Tab Bar Position");
+
+        model: StringList {
+          strings [
+            _("Top"),
+            _("Bottom"),
+          ]
+        };
+      }
+
+      Adw.SwitchRow wide_tabs_row {
+        title: _("Wide Tabs");
+        subtitle: _("Expand tabs to fill the full width of the tab bar");
+      }
+
+      Adw.ComboRow window_save_state_row {
+        title: _("Restore Window");
+
+        model: StringList {
+          strings [
+            _("Default"),
+            _("Never"),
+            _("Always"),
           ]
         };
       }
@@ -215,6 +300,27 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
       Adw.SwitchRow bold_is_bright_row {
         title: _("Bold is Bright");
         subtitle: _("Render bold text using bright ANSI colors");
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Mouse and Selection");
+
+      Adw.SwitchRow mouse_hide_while_typing_row {
+        title: _("Hide Pointer While Typing");
+        subtitle: _("Automatically hide the mouse pointer when typing");
+      }
+
+      Adw.ComboRow copy_on_select_row {
+        title: _("Copy on Select");
+
+        model: StringList {
+          strings [
+            _("Off"),
+            _("Selection Clipboard"),
+            _("System Clipboard"),
+          ]
+        };
       }
     }
 
@@ -258,6 +364,65 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
           value: 10000;
           step-increment: 100;
           page-increment: 1000;
+        };
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Shell");
+
+      Adw.ComboRow shell_integration_row {
+        title: _("Shell Integration");
+        subtitle: _("Enables shell integration features like working directory tracking");
+
+        model: StringList {
+          strings [
+            _("Auto-detect"),
+            _("None"),
+            _("Bash"),
+            _("Elvish"),
+            _("Fish"),
+            _("Nushell"),
+            _("Zsh"),
+          ]
+        };
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Notifications");
+
+      Adw.ComboRow notify_on_finish_row {
+        title: _("Notify on Command Finish");
+        subtitle: _("Send a notification when a long-running command completes");
+
+        model: StringList {
+          strings [
+            _("Never"),
+            _("When Unfocused"),
+            _("Always"),
+          ]
+        };
+      }
+
+      Adw.SwitchRow desktop_notifications_row {
+        title: _("Desktop Notifications");
+        subtitle: _("Allow the terminal to send desktop notifications via OSC 9 or 777");
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Safety");
+
+      Adw.ComboRow confirm_close_row {
+        title: _("Confirm Before Closing");
+
+        model: StringList {
+          strings [
+            _("Never"),
+            _("When Running"),
+            _("Always"),
+          ]
         };
       }
     }
