@@ -1331,6 +1331,44 @@ pub const Application = extern struct {
         // modal (not to any specific window) because we don't even
         // know if the window will load.
         self.showConfigErrorsDialog();
+
+        // M3 smoke test: spawn ptyxis-agent, list containers, log + tear down.
+        self.smokeTestContainerClient();
+    }
+
+    fn smokeTestContainerClient(_: *Self) void {
+        const agent_env = std.posix.getenv("PTYXIS_AGENT_PATH") orelse {
+            log.info("PTYXIS_AGENT_PATH unset — skipping container smoke test", .{});
+            return;
+        };
+        const alloc = std.heap.c_allocator;
+        const agent_path = alloc.dupeZ(u8, agent_env) catch return;
+        defer alloc.free(agent_path);
+
+        var client = ContainerClient.spawn(alloc, agent_path) catch |err| {
+            log.warn("container smoke test: spawn failed: {s}", .{@errorName(err)});
+            return;
+        };
+        defer client.deinit();
+
+        const list = client.listContainers() catch |err| {
+            log.warn("container smoke test: list failed: {s}", .{@errorName(err)});
+            return;
+        };
+        defer {
+            for (list) |*c| {
+                var m = c.*;
+                m.deinit(alloc);
+            }
+            alloc.free(list);
+        }
+
+        log.info("container smoke test: found {d} containers", .{list.len});
+        for (list) |c| {
+            log.info("  {s}  id={s} provider={s} display={s}", .{
+                c.object_path, c.id, c.provider, c.display_name,
+            });
+        }
     }
 
     /// Configure libxev to use a specific backend.
