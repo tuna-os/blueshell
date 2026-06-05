@@ -155,6 +155,7 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
         model: StringList {
           strings [
             _("Block"),
+            _("Hollow Block"),
             _("I-Beam"),
             _("Underline"),
           ]
@@ -219,6 +220,27 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
 
     Adw.PreferencesGroup {
       title: _("Scrolling");
+
+      Adw.ComboRow scrollbar_row {
+        title: _("Scrollbar");
+
+        model: StringList {
+          strings [
+            _("System Default"),
+            _("Never"),
+          ]
+        };
+      }
+
+      Adw.SwitchRow scroll_on_keystroke_row {
+        title: _("Scroll on Keystroke");
+        subtitle: _("Scroll to the bottom upon input keystroke");
+      }
+
+      Adw.SwitchRow scroll_on_output_row {
+        title: _("Scroll on Output");
+        subtitle: _("Scroll to the bottom when new content is available");
+      }
 
       Adw.SwitchRow limit_scrollback_row {
         title: _("Limit Scrollback");

@@ -46,6 +46,9 @@ pub const PreferencesWindow = extern struct {
         column_spacing_row: *adw.SpinRow,
         tab_position_row: *adw.ComboRow,
         use_system_font_switch: *gtk.Switch,
+        scrollbar_row: *adw.ComboRow,
+        scroll_on_keystroke_row: *adw.SwitchRow,
+        scroll_on_output_row: *adw.SwitchRow,
         profiles_listbox: *gtk.ListBox,
         add_profile_button: *gtk.Button,
 
@@ -177,6 +180,30 @@ pub const PreferencesWindow = extern struct {
             priv.use_system_font_switch.as(gobject.Object),
             "notify::active",
             @ptrCast(&useSystemFontChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.scrollbar_row.as(gobject.Object),
+            "notify::selected",
+            @ptrCast(&scrollbarChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.scroll_on_keystroke_row.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&scrollOnKeystrokeChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.scroll_on_output_row.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&scrollOnOutputChanged),
             self,
             null,
             .{},
@@ -609,15 +636,16 @@ pub const PreferencesWindow = extern struct {
         const adj = gtk.Range.getAdjustment(priv.opacity_scale.as(gtk.Range));
         adj.setValue(cfg.@"background-opacity");
 
-        // Cursor style (block / bar / underline → indices 0 / 1 / 2).
+        // Cursor style: block=0, block_hollow=1, bar=2, underline=3.
         const cs_idx: c_uint = switch (cfg.@"cursor-style") {
-            .block, .block_hollow => 0,
-            .bar => 1,
-            .underline => 2,
+            .block => 0,
+            .block_hollow => 1,
+            .bar => 2,
+            .underline => 3,
         };
         priv.cursor_shape_row.setSelected(cs_idx);
 
-        // Cursor blink (true → "On" index 1, false → "Off" index 2, null → "Follow System" index 0).
+        // Cursor blink: Follow System=0, On=1, Off=2.
         const blink_idx: c_uint = if (cfg.@"cursor-style-blink") |b| (if (b) 1 else 2) else 0;
         priv.cursor_blinking_row.setSelected(blink_idx);
 
@@ -657,6 +685,17 @@ pub const PreferencesWindow = extern struct {
             else => false,
         } else false;
         priv.bold_is_bright_row.setActive(if (bib) 1 else 0);
+
+        // Scrollbar: system=0, never=1.
+        priv.scrollbar_row.setSelected(switch (cfg.scrollbar) {
+            .system => 0,
+            .never => 1,
+        });
+
+        // Scroll to bottom.
+        const stb = cfg.@"scroll-to-bottom";
+        priv.scroll_on_keystroke_row.setActive(if (stb.keystroke) 1 else 0);
+        priv.scroll_on_output_row.setActive(if (stb.output) 1 else 0);
     }
 
     fn spacingValueFromConfig(mm: anytype) f64 {
@@ -671,8 +710,9 @@ pub const PreferencesWindow = extern struct {
         const i = row.getSelected();
         const value: []const u8 = switch (i) {
             0 => "block",
-            1 => "bar",
-            2 => "underline",
+            1 => "block_hollow",
+            2 => "bar",
+            3 => "underline",
             else => return,
         };
         config_bridge.setKey(std.heap.c_allocator, "cursor-style", value, null) catch |err| {
@@ -684,8 +724,10 @@ pub const PreferencesWindow = extern struct {
 
     fn cursorBlinkingChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
         const i = row.getSelected();
+        // Index 0 = Follow System: clear the key so Ghostty uses its default.
+        // Index 1 = On, 2 = Off.
         const value: []const u8 = switch (i) {
-            0 => "true", // Follow System ≈ default on
+            0 => "",
             1 => "true",
             2 => "false",
             else => return,
@@ -695,6 +737,48 @@ pub const PreferencesWindow = extern struct {
             return;
         };
         Application.default().triggerReload();
+    }
+
+    fn scrollbarChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const i = row.getSelected();
+        const value: []const u8 = switch (i) {
+            0 => "system",
+            1 => "never",
+            else => return,
+        };
+        config_bridge.setKey(std.heap.c_allocator, "scrollbar", value, null) catch |err| {
+            log.warn("scrollbar write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn writeScrollToBottom(keystroke: bool, output: bool) void {
+        var buf: [32]u8 = undefined;
+        var n: usize = 0;
+        const ks: []const u8 = if (keystroke) "keystroke" else "no-keystroke";
+        std.mem.copyForwards(u8, buf[n..], ks);
+        n += ks.len;
+        buf[n] = ',';
+        n += 1;
+        const op: []const u8 = if (output) "output" else "no-output";
+        std.mem.copyForwards(u8, buf[n..], op);
+        n += op.len;
+        config_bridge.setKey(std.heap.c_allocator, "scroll-to-bottom", buf[0..n], null) catch |err| {
+            log.warn("scroll-to-bottom write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn scrollOnKeystrokeChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
+        const priv = self.private();
+        writeScrollToBottom(row.getActive() != 0, priv.scroll_on_output_row.getActive() != 0);
+    }
+
+    fn scrollOnOutputChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
+        const priv = self.private();
+        writeScrollToBottom(priv.scroll_on_keystroke_row.getActive() != 0, row.getActive() != 0);
     }
 
     fn audibleBellChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
@@ -984,6 +1068,9 @@ pub const PreferencesWindow = extern struct {
             class.bindTemplateChildPrivate("column_spacing_row", .{});
             class.bindTemplateChildPrivate("tab_position_row", .{});
             class.bindTemplateChildPrivate("use_system_font_switch", .{});
+            class.bindTemplateChildPrivate("scrollbar_row", .{});
+            class.bindTemplateChildPrivate("scroll_on_keystroke_row", .{});
+            class.bindTemplateChildPrivate("scroll_on_output_row", .{});
             class.bindTemplateChildPrivate("profiles_listbox", .{});
             class.bindTemplateChildPrivate("add_profile_button", .{});
         }
