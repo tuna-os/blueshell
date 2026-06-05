@@ -1358,6 +1358,14 @@ pub const Application = extern struct {
             const window = PreferencesWindow.new();
             window.as(gtk.Window).present();
         }
+
+        // Optional: smoke test the config-file mutator.
+        if (std.posix.getenv("GHOSTTY_PTYXIS_TEST_CONFIG_WRITE")) |val| {
+            const cb = @import("config_bridge.zig");
+            cb.setKey(std.heap.c_allocator, "background-opacity", val) catch |err| {
+                log.warn("config_bridge.setKey test failed: {s}", .{@errorName(err)});
+            };
+        }
     }
 
     fn startupContainerClient(self: *Self) void {
