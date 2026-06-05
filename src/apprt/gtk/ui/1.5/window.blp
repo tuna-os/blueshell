@@ -195,6 +195,43 @@ menu split_menu {
 }
 
 menu main_menu {
+  // Section 1: New things (matches Ptyxis primary_menu top)
+  section {
+    item {
+      label: _("New _Tab");
+      action: "win.new-tab";
+    }
+
+    item {
+      label: _("New _Window");
+      action: "win.new-window";
+    }
+  }
+
+  // Section 2: Show open tabs
+  section {
+    item {
+      label: _("Show Open Tabs");
+      action: "win.tab-overview";
+    }
+  }
+
+  // Section 3: Window state
+  section {
+    item {
+      label: _("Fullscreen");
+      action: "win.fullscreen";
+      hidden-when: "action-disabled";
+    }
+
+    item {
+      label: _("Leave Fullscreen");
+      action: "win.unfullscreen";
+      hidden-when: "action-disabled";
+    }
+  }
+
+  // Section 4: Edit (Ghostty extras Ptyxis lacks: copy/paste/clear)
   section {
     item {
       label: _("Copy");
@@ -205,38 +242,19 @@ menu main_menu {
       label: _("Paste");
       action: "win.paste";
     }
-  }
 
-  section {
     item {
-      label: _("New Window");
-      action: "win.new-window";
+      label: _("Clear");
+      action: "win.clear";
     }
 
     item {
-      label: _("Close Window");
-      action: "win.close";
+      label: _("Reset");
+      action: "win.reset";
     }
   }
 
-  section {
-    item {
-      label: _("Change Tab Title…");
-      action: "win.prompt-tab-title";
-    }
-
-    item {
-      label: _("New Tab");
-      action: "win.new-tab";
-    }
-
-    item {
-      label: _("Close Tab");
-      action: "win.close-tab";
-      target: "this";
-    }
-  }
-
+  // Section 5: Splits (Ghostty extras Ptyxis lacks)
   section {
     submenu {
       label: _("Split");
@@ -268,18 +286,21 @@ menu main_menu {
     }
   }
 
+  // Section 6: Tab management
   section {
     item {
-      label: _("Clear");
-      action: "win.clear";
+      label: _("Change Tab Title…");
+      action: "win.prompt-tab-title";
     }
 
     item {
-      label: _("Reset");
-      action: "win.reset";
+      label: _("Close Tab");
+      action: "win.close-tab";
+      target: "this";
     }
   }
 
+  // Section 7: Tools (Ghostty extras)
   section {
     item {
       label: _("Command Palette");
@@ -290,9 +311,12 @@ menu main_menu {
       label: _("Terminal Inspector");
       action: "win.toggle-inspector";
     }
+  }
 
+  // Section 8: App-level (matches Ptyxis primary_menu bottom)
+  section {
     item {
-      label: _("Preferences");
+      label: _("_Preferences");
       action: "app.preferences";
     }
 
@@ -307,9 +331,10 @@ menu main_menu {
     }
   }
 
+  // Section 9: About + Quit
   section {
     item {
-      label: _("About Ghostty");
+      label: _("_About Ghostty");
       action: "win.about";
     }
 
