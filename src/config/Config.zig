@@ -1357,6 +1357,14 @@ input: RepeatableReadableIO = .{},
 /// This is primarily useful for scripts or debugging.
 @"wait-after-command": bool = false,
 
+/// The action to take when the terminal child process exits.
+/// Valid values:
+///
+///   * `none` - Do nothing (remain open, wait for keypress if configured)
+///   * `restart` - Restart the command
+///   * `close` - Close the terminal window/tab
+@"exit-action": ExitAction = .close,
+
 /// The number of milliseconds of runtime below which we consider a process exit
 /// to be abnormal. This is used to show an error message when the process exits
 /// too quickly.
@@ -9224,6 +9232,13 @@ pub const WindowSaveState = enum {
 pub const WindowNewTabPosition = enum {
     current,
     end,
+};
+
+/// See exit-action
+pub const ExitAction = enum {
+    none,
+    restart,
+    close,
 };
 
 /// See macos-dock-drop-behavior
