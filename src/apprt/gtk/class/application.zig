@@ -40,6 +40,13 @@ const Window = @import("window.zig").Window;
 const Tab = @import("tab.zig").Tab;
 const CloseConfirmationDialog = @import("close_confirmation_dialog.zig").CloseConfirmationDialog;
 const ConfigErrorsDialog = @import("config_errors_dialog.zig").ConfigErrorsDialog;
+const ContainerClient = @import("container_client.zig").Client;
+
+comptime {
+    _ = ContainerClient.spawn;
+    _ = ContainerClient.listContainers;
+    _ = ContainerClient.deinit;
+}
 const GlobalShortcuts = @import("global_shortcuts.zig").GlobalShortcuts;
 const OpenURI = @import("../portal.zig").OpenURI;
 
