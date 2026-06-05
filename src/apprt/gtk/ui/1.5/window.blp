@@ -51,11 +51,11 @@ template $GhosttyWindow: Adw.ApplicationWindow {
         };
 
         [start]
-        Adw.SplitButton {
+        Adw.SplitButton new_tab_button {
           clicked => $new_tab();
           icon-name: "tab-new-symbolic";
           tooltip-text: _("New Tab");
-          dropdown-tooltip: _("New Split");
+          dropdown-tooltip: _("New Tab in Container…");
           menu-model: split_menu;
           can-focus: false;
           focus-on-click: false;
@@ -97,7 +97,7 @@ template $GhosttyWindow: Adw.ApplicationWindow {
             side: start;
           }
 
-          Adw.SplitButton {
+          Adw.SplitButton new_tab_button_compact {
             styles [
               "flat",
             ]
@@ -105,7 +105,7 @@ template $GhosttyWindow: Adw.ApplicationWindow {
             clicked => $new_tab();
             icon-name: "tab-new-symbolic";
             tooltip-text: _("New Tab");
-            dropdown-tooltip: _("New Split");
+            dropdown-tooltip: _("New Tab in Container…");
             menu-model: split_menu;
             can-focus: false;
             focus-on-click: false;

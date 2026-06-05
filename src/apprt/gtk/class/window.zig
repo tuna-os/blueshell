@@ -22,6 +22,7 @@ const winprotopkg = @import("../winproto.zig");
 const Common = @import("../class.zig").Common;
 const Config = @import("config.zig").Config;
 const Application = @import("application.zig").Application;
+const PtyxisContainer = @import("container_object.zig").Container;
 const CloseConfirmationDialog = @import("close_confirmation_dialog.zig").CloseConfirmationDialog;
 const SplitTree = @import("split_tree.zig").SplitTree;
 const Surface = @import("surface.zig").Surface;
@@ -265,6 +266,8 @@ pub const Window = extern struct {
         tab_view: *adw.TabView,
         toolbar: *adw.ToolbarView,
         toast_overlay: *adw.ToastOverlay,
+        new_tab_button: *adw.SplitButton,
+        new_tab_button_compact: *adw.SplitButton,
 
         pub var offset: c_int = 0;
     };
@@ -341,6 +344,11 @@ pub const Window = extern struct {
             self.as(gtk.Window).setTitle(title);
         }
 
+        // Populate the new-tab split-button dropdown with the container
+        // list from ptyxis-agent. Falls back to the static split_menu when
+        // no agent is reachable.
+        self.refreshContainerMenu();
+
         // We always sync our appearance at the end because loading our
         // config and such can affect our bindings which are setup initially
         // in initTemplate.
@@ -361,6 +369,7 @@ pub const Window = extern struct {
             .init("close", actionClose, null),
             .init("close-tab", actionCloseTab, s_variant_type),
             .init("new-tab", actionNewTab, null),
+            .init("new-tab-in-container", actionNewTabInContainer, s_variant_type),
             .init("new-window", actionNewWindow, null),
             .init("prompt-surface-title", actionPromptSurfaceTitle, null),
             .init("prompt-tab-title", actionPromptTabTitle, null),
@@ -1341,6 +1350,66 @@ pub const Window = extern struct {
         self.performBindingAction(.new_tab);
     }
 
+    /// Build the container picker menu from the application's cached
+    /// container model and attach it to both new-tab SplitButtons. If the
+    /// agent isn't reachable, leave the static split_menu in place.
+    fn refreshContainerMenu(self: *Self) void {
+        const priv = self.private();
+        const app = Application.default();
+        const store = app.containerModel() orelse return;
+
+        const menu = gio.Menu.new();
+        defer _ = gobject.Object.unref(menu.as(gobject.Object));
+
+        // First section: Host system.
+        const host_section = gio.Menu.new();
+        defer _ = gobject.Object.unref(host_section.as(gobject.Object));
+        {
+            const item = gio.MenuItem.new("Host", "win.new-tab-in-container");
+            defer _ = gobject.Object.unref(item.as(gobject.Object));
+            item.setActionAndTargetValue(
+                "win.new-tab-in-container",
+                glib.Variant.new("s", @as([*:0]const u8, "host")),
+            );
+            host_section.appendItem(item);
+        }
+        menu.appendSection(null, host_section.as(gio.MenuModel));
+
+        // Second section: detected containers.
+        const containers_section = gio.Menu.new();
+        defer _ = gobject.Object.unref(containers_section.as(gobject.Object));
+
+        const n = store.as(gio.ListModel).getNItems();
+        var i: c_uint = 0;
+        while (i < n) : (i += 1) {
+            const raw = store.as(gio.ListModel).getItem(i) orelse continue;
+            const obj: *gobject.Object = @ptrCast(@alignCast(raw));
+            defer gobject.Object.unref(obj);
+            const c = gobject.ext.cast(PtyxisContainer, obj) orelse continue;
+
+            const display = c.getDisplayName() orelse continue;
+            const id = c.getId() orelse continue;
+            if (display.len == 0) continue;
+
+            const item = gio.MenuItem.new(display.ptr, null);
+            defer _ = gobject.Object.unref(item.as(gobject.Object));
+            item.setActionAndTargetValue(
+                "win.new-tab-in-container",
+                glib.Variant.new("s", id.ptr),
+            );
+            containers_section.appendItem(item);
+        }
+
+        const containers_label: [*:0]const u8 = "Containers";
+        menu.appendSection(containers_label, containers_section.as(gio.MenuModel));
+
+        // Wire to both visible split-buttons.
+        priv.new_tab_button.setMenuModel(menu.as(gio.MenuModel));
+        priv.new_tab_button_compact.setMenuModel(menu.as(gio.MenuModel));
+
+        log.info("container menu built: {d} containers", .{n});
+    }
+
     fn tabOverviewCreateTab(
         _: *adw.TabOverview,
         self: *Self,
@@ -1884,6 +1953,26 @@ pub const Window = extern struct {
         self.performBindingAction(.new_tab);
     }
 
+    /// Open a new tab inside a named container. The container_id is what
+    /// org.gnome.Ptyxis.Container's "Id" property returns (or "host" /
+    /// empty for the host system). PTY routing through ptyxis-agent
+    /// lands in a later step; for now we log and create a regular tab.
+    fn actionNewTabInContainer(
+        _: *gio.SimpleAction,
+        parameter_: ?*glib.Variant,
+        self: *Window,
+    ) callconv(.c) void {
+        const parameter = parameter_ orelse {
+            self.performBindingAction(.new_tab);
+            return;
+        };
+        var len: usize = 0;
+        const id_ptr = glib.Variant.getString(parameter, &len);
+        const id = id_ptr[0..len];
+        log.info("new-tab-in-container: id={s} (TODO: route PTY through agent)", .{id});
+        self.performBindingAction(.new_tab);
+    }
+
     fn actionPromptContextTabTitle(
         _: *gio.SimpleAction,
         _: ?*glib.Variant,
@@ -2127,6 +2216,8 @@ pub const Window = extern struct {
             class.bindTemplateChildPrivate("tab_view", .{});
             class.bindTemplateChildPrivate("toolbar", .{});
             class.bindTemplateChildPrivate("toast_overlay", .{});
+            class.bindTemplateChildPrivate("new_tab_button", .{});
+            class.bindTemplateChildPrivate("new_tab_button_compact", .{});
 
             // Template Callbacks
             class.bindTemplateCallback("realize", &windowRealize);
