@@ -43,6 +43,7 @@ const ConfigErrorsDialog = @import("config_errors_dialog.zig").ConfigErrorsDialo
 const ContainerClient = @import("container_client.zig").Client;
 const PtyxisContainer = @import("container_object.zig").Container;
 const PreferencesWindow = @import("preferences_window.zig").PreferencesWindow;
+const palette_mod = @import("palette.zig");
 
 comptime {
     _ = ContainerClient.spawn;
@@ -53,6 +54,7 @@ comptime {
     _ = PtyxisContainer.getGObjectType;
     _ = PreferencesWindow.new;
     _ = PreferencesWindow.getGObjectType;
+    _ = palette_mod.loadAll;
 }
 const GlobalShortcuts = @import("global_shortcuts.zig").GlobalShortcuts;
 const OpenURI = @import("../portal.zig").OpenURI;
