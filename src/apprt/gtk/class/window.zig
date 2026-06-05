@@ -2003,13 +2003,44 @@ pub const Window = extern struct {
 
         const priv = self.private();
         if (priv.tab_view.getSelectedPage()) |page| {
-            if (title) |t| page.setTitle(t.ptr);
+            if (title) |t| {
+                // Setting page.title alone loses to the tab→page title
+                // binding (which sources the surface's terminal title).
+                // Tab.setTitleOverride sits at the top of the
+                // closureComputedTitle priority chain so the container
+                // name sticks until the user explicitly renames.
+                const child = page.getChild();
+                if (gobject.ext.cast(Tab, child)) |tab_obj| {
+                    tab_obj.setTitleOverride(t);
+                }
+                page.setTitle(t.ptr);
+            }
             if (icon) |i| {
-                const themed = gio.ThemedIcon.new(i.ptr);
+                // The Ptyxis-shipped symbolic names (container-toolbox-
+                // symbolic, container-podman-symbolic, …) aren't in the
+                // adwaita icon theme, so they render as a generic
+                // missing-icon placeholder. Map them to icons that do
+                // exist in standard themes until we ship our own.
+                const remapped = remapContainerIcon(i);
+                const themed = gio.ThemedIcon.new(remapped.ptr);
                 defer _ = gobject.Object.unref(themed.as(gobject.Object));
                 page.setIcon(themed.as(gio.Icon));
             }
         }
+    }
+
+    fn remapContainerIcon(name: [:0]const u8) [:0]const u8 {
+        const map = [_]struct { from: []const u8, to: [:0]const u8 }{
+            .{ .from = "container-toolbox-symbolic", .to = "applications-system-symbolic" },
+            .{ .from = "container-podman-symbolic", .to = "package-x-generic-symbolic" },
+            .{ .from = "container-distrobox-symbolic", .to = "applications-engineering-symbolic" },
+            .{ .from = "container-jhbuild-symbolic", .to = "applications-development-symbolic" },
+            .{ .from = "container-generic-symbolic", .to = "applications-system-symbolic" },
+        };
+        for (map) |entry| {
+            if (std.mem.eql(u8, name, entry.from)) return entry.to;
+        }
+        return name;
     }
 
     /// Test helper: invoke the agent-spawn path directly with a given id.
