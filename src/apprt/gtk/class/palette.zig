@@ -75,7 +75,17 @@ pub fn parse(id: []const u8, bytes: []const u8) Palette {
 
         switch (section) {
             .palette => {
-                if (std.mem.eql(u8, key, "Name")) p.name = val;
+                if (std.mem.eql(u8, key, "Name")) {
+                    p.name = val;
+                } else {
+                    // Many palettes (Gogh-derived, e.g. Aci, Aco, etc.)
+                    // put Background/Foreground/Color0..15 directly
+                    // under [Palette] with no [Light]/[Dark] sections.
+                    // Apply such keys to BOTH variants so the renderer's
+                    // dark-then-light fallback finds them either way.
+                    applyKey(&p.light, key, val);
+                    applyKey(&p.dark, key, val);
+                }
             },
             .light, .dark => {
                 const v: *Variant = if (section == .light) &p.light else &p.dark;
