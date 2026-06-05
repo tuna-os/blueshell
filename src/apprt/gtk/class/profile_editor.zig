@@ -51,7 +51,6 @@ pub const ProfileEditor = extern struct {
 
         // Template bindings
         command_entry: *adw.EntryRow,
-        login_shell_row: *adw.SwitchRow,
         exit_action_row: *adw.ComboRow,
         title_prefix_row: *adw.EntryRow,
         use_system_font_switch: *gtk.Switch,
@@ -92,12 +91,9 @@ pub const ProfileEditor = extern struct {
             .shell => |s| s,
             .direct => |arr| if (arr.len > 0) arr[0] else "",
         } else "";
-        const cmd_z = try std.fmt.allocPrintSentinel(alloc, u8, "{s}", .{cmd});
+        const cmd_z = try alloc.dupeZ(u8, cmd);
         defer alloc.free(cmd_z);
         priv.command_entry.as(gtk.Editable).setText(cmd_z);
-
-        // Login Shell.
-        priv.login_shell_row.setActive(if (cfg.@"login-shell") 1 else 0);
 
         // Exit Action.
         const ea_idx: c_uint = switch (cfg.@"exit-action") {
@@ -109,7 +105,7 @@ pub const ProfileEditor = extern struct {
 
         // Title Prefix (Custom Title).
         const title = cfg.title orelse "";
-        const title_z = try std.fmt.allocPrintSentinel(alloc, u8, "{s}", .{title});
+        const title_z = try alloc.dupeZ(u8, title);
         defer alloc.free(title_z);
         priv.title_prefix_row.as(gtk.Editable).setText(title_z);
 
@@ -120,14 +116,15 @@ pub const ProfileEditor = extern struct {
         // Font Button.
         const family_slice = if (cfg.@"font-family".list.items.len > 0) cfg.@"font-family".list.items[0] else "Monospace";
         const font_size = cfg.@"font-size";
-        const font_str = try std.fmt.allocPrintSentinel(alloc, u8, "{s} {d}", .{ family_slice, font_size });
+        const font_str = try std.fmt.allocPrint(alloc, "{s} {d}\x00", .{ family_slice, font_size });
+        const font_str_z: [:0]const u8 = font_str[0 .. font_str.len - 1 :0];
         defer alloc.free(font_str);
 
         const PangoLibc = struct {
             extern "c" fn pango_font_description_from_string(str: [*:0]const u8) *anyopaque;
             extern "c" fn pango_font_description_free(d: *anyopaque) void;
         };
-        const desc = PangoLibc.pango_font_description_from_string(font_str);
+        const desc = PangoLibc.pango_font_description_from_string(font_str_z);
         defer PangoLibc.pango_font_description_free(desc);
         priv.font_button.setFontDesc(@ptrCast(desc));
 
@@ -215,15 +212,6 @@ pub const ProfileEditor = extern struct {
         const text = std.mem.span(editable.getText());
         config_bridge.setKey(std.heap.c_allocator, "command", text, priv.profile_path) catch |err| {
             log.warn("command write failed: {s}", .{@errorName(err)});
-        };
-        self.syncActiveProfile();
-    }
-
-    fn loginShellChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
-        const priv = self.private();
-        const val = if (row.getActive() != 0) "true" else "false";
-        config_bridge.setKey(std.heap.c_allocator, "login-shell", val, priv.profile_path) catch |err| {
-            log.warn("login-shell write failed: {s}", .{@errorName(err)});
         };
         self.syncActiveProfile();
     }
@@ -389,15 +377,6 @@ pub const ProfileEditor = extern struct {
         );
 
         _ = gobject.signalConnectData(
-            priv.login_shell_row.as(gobject.Object),
-            "notify::active",
-            @ptrCast(&loginShellChanged),
-            self,
-            null,
-            .{},
-        );
-
-        _ = gobject.signalConnectData(
             priv.exit_action_row.as(gobject.Object),
             "notify::selected",
             @ptrCast(&exitActionChanged),
@@ -539,7 +518,6 @@ pub const ProfileEditor = extern struct {
             );
 
             class.bindTemplateChildPrivate("command_entry", .{});
-            class.bindTemplateChildPrivate("login_shell_row", .{});
             class.bindTemplateChildPrivate("exit_action_row", .{});
             class.bindTemplateChildPrivate("title_prefix_row", .{});
             class.bindTemplateChildPrivate("use_system_font_switch", .{});
