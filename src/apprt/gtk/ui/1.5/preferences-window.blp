@@ -267,9 +267,21 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
     title: _("Profiles");
     icon-name: "system-users-symbolic";
 
-    Adw.PreferencesGroup {
+    Adw.PreferencesGroup profiles_group {
       title: _("Profiles");
-      description: _("Ghostty does not have a built-in profile system. The configuration shown on the other pages is your single, default profile. To switch behavior between launches, maintain alternate config files and start Ghostty with `--config-file=…`.");
+      description: _("A profile is a snapshot of your current Ghostty configuration. Switching applies that snapshot live; \"Save\" overwrites a profile with the current settings.");
+
+      [header-suffix]
+      Button add_profile_button {
+        styles [
+          "flat",
+        ]
+
+        Adw.ButtonContent {
+          icon-name: "list-add-symbolic";
+          label: _("Add");
+        }
+      }
 
       ListBox profiles_listbox {
         selection-mode: none;
@@ -277,17 +289,6 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
         styles [
           "boxed-list",
         ]
-
-        Adw.ActionRow default_profile_row {
-          title: _("Default");
-          subtitle: _("~/.config/ghostty/config");
-          activatable: false;
-
-          [suffix]
-          Image {
-            icon-name: "object-select-symbolic";
-          }
-        }
       }
     }
   }

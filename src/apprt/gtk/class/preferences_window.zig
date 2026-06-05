@@ -12,7 +12,10 @@ const gresource = @import("../build/gresource.zig");
 const Common = @import("../class.zig").Common;
 const config_bridge = @import("config_bridge.zig");
 const palette_mod = @import("palette.zig");
+const profile_store = @import("profile_store.zig");
 const Application = @import("application.zig").Application;
+const gio = @import("gio");
+const glib = @import("glib");
 
 const log = std.log.scoped(.gtk_ptyxis_preferences);
 
@@ -43,6 +46,8 @@ pub const PreferencesWindow = extern struct {
         column_spacing_row: *adw.SpinRow,
         tab_position_row: *adw.ComboRow,
         use_system_font_switch: *gtk.Switch,
+        profiles_listbox: *gtk.ListBox,
+        add_profile_button: *gtk.Button,
 
         pub var offset: c_int = 0;
     };
@@ -53,6 +58,10 @@ pub const PreferencesWindow = extern struct {
 
     fn init(self: *Self, _: *Class) callconv(.c) void {
         gtk.Widget.initTemplate(self.as(gtk.Widget));
+
+        // Install per-window actions for the profile row menus (so menu
+        // items can reference prefs.profile-save / prefs.profile-delete).
+        installProfileActions(self);
 
         // Load current values from the in-memory config before wiring
         // signals so we don't trigger spurious writebacks.
@@ -172,6 +181,233 @@ pub const PreferencesWindow = extern struct {
             null,
             .{},
         );
+
+        // Profiles page: populate and wire the Add button.
+        populateProfiles(self);
+        _ = gobject.signalConnectData(
+            priv.add_profile_button.as(gobject.Object),
+            "clicked",
+            @ptrCast(&addProfileClicked),
+            self,
+            null,
+            .{},
+        );
+    }
+
+    fn installProfileActions(self: *Self) void {
+        const group = gio.SimpleActionGroup.new();
+        const param_s = glib.VariantType.new("s");
+        defer param_s.free();
+
+        const save_action = gio.SimpleAction.new("profile-save", param_s);
+        _ = gobject.signalConnectData(
+            save_action.as(gobject.Object),
+            "activate",
+            @ptrCast(&profileSaveActivated),
+            self,
+            null,
+            .{},
+        );
+        group.as(gio.ActionMap).addAction(save_action.as(gio.Action));
+        _ = gobject.Object.unref(save_action.as(gobject.Object));
+
+        const del_action = gio.SimpleAction.new("profile-delete", param_s);
+        _ = gobject.signalConnectData(
+            del_action.as(gobject.Object),
+            "activate",
+            @ptrCast(&profileDeleteActivated),
+            self,
+            null,
+            .{},
+        );
+        group.as(gio.ActionMap).addAction(del_action.as(gio.Action));
+        _ = gobject.Object.unref(del_action.as(gobject.Object));
+
+        self.as(gtk.Widget).insertActionGroup("prefs", group.as(gio.ActionGroup));
+        _ = gobject.Object.unref(group.as(gobject.Object));
+    }
+
+    fn profileSaveActivated(
+        _: *gio.SimpleAction,
+        parameter: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const p = parameter orelse return;
+        var len: usize = 0;
+        const c_ptr = glib.Variant.getString(p, &len);
+        const name = c_ptr[0..len];
+        profile_store.updateFromActive(std.heap.c_allocator, name) catch |err| {
+            log.warn("profile save({s}) failed: {s}", .{ name, @errorName(err) });
+            return;
+        };
+        populateProfiles(self);
+    }
+
+    fn profileDeleteActivated(
+        _: *gio.SimpleAction,
+        parameter: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const p = parameter orelse return;
+        var len: usize = 0;
+        const c_ptr = glib.Variant.getString(p, &len);
+        const name = c_ptr[0..len];
+        profile_store.delete(std.heap.c_allocator, name) catch |err| {
+            log.warn("profile delete({s}) failed: {s}", .{ name, @errorName(err) });
+            return;
+        };
+        populateProfiles(self);
+    }
+
+    fn populateProfiles(self: *Self) void {
+        const priv = self.private();
+        const alloc = std.heap.c_allocator;
+
+        // Clear existing rows.
+        while (priv.profiles_listbox.as(gtk.Widget).getFirstChild()) |child| {
+            priv.profiles_listbox.remove(@ptrCast(child));
+        }
+
+        const profiles = profile_store.list(alloc) catch |err| {
+            log.warn("profile list failed: {s}", .{@errorName(err)});
+            return;
+        };
+        defer {
+            for (profiles) |p| p.deinit(alloc);
+            alloc.free(profiles);
+        }
+
+        if (profiles.len == 0) {
+            // Empty-state row.
+            const row = adw.ActionRow.new();
+            row.as(adw.PreferencesRow).setTitle("No profiles yet");
+            row.setSubtitle("Click Add to snapshot the current settings");
+            row.as(gtk.ListBoxRow).setActivatable(0);
+            priv.profiles_listbox.append(row.as(gtk.Widget));
+            return;
+        }
+
+        for (profiles) |p| {
+            const row = adw.ActionRow.new();
+            const name_z = alloc.dupeZ(u8, p.name) catch continue;
+            // Keep name_z alive for the row's lifetime by attaching it as
+            // GObject data; freed in finalize handler.
+            gobject.Object.setDataFull(
+                row.as(gobject.Object),
+                "ptyxis-profile-name",
+                @ptrCast(@constCast(name_z.ptr)),
+                &freeCString,
+            );
+            row.as(adw.PreferencesRow).setTitle(name_z.ptr);
+            row.as(gtk.ListBoxRow).setActivatable(1);
+
+            if (p.active) {
+                const check = gtk.Image.newFromIconName("object-select-symbolic");
+                row.addSuffix(check.as(gtk.Widget));
+            }
+
+            // Per-row action menu (Save Changes / Delete).
+            const menu = gio.Menu.new();
+            const save_item = gio.MenuItem.new("Save Changes", null);
+            save_item.setActionAndTargetValue(
+                "prefs.profile-save",
+                glib.Variant.newString(name_z.ptr),
+            );
+            menu.appendItem(save_item);
+            _ = gobject.Object.unref(save_item.as(gobject.Object));
+
+            const del_item = gio.MenuItem.new("Delete", null);
+            del_item.setActionAndTargetValue(
+                "prefs.profile-delete",
+                glib.Variant.newString(name_z.ptr),
+            );
+            menu.appendItem(del_item);
+            _ = gobject.Object.unref(del_item.as(gobject.Object));
+
+            const menu_btn = gtk.MenuButton.new();
+            menu_btn.setIconName("view-more-symbolic");
+            menu_btn.setMenuModel(menu.as(gio.MenuModel));
+            menu_btn.as(gtk.Widget).addCssClass("flat");
+            menu_btn.as(gtk.Widget).setValign(.center);
+            row.addSuffix(menu_btn.as(gtk.Widget));
+            _ = gobject.Object.unref(menu.as(gobject.Object));
+
+            priv.profiles_listbox.append(row.as(gtk.Widget));
+        }
+
+        // Row activation = switch profile.
+        _ = gobject.signalConnectData(
+            priv.profiles_listbox.as(gobject.Object),
+            "row-activated",
+            @ptrCast(&profileRowActivated),
+            self,
+            null,
+            .{ .after = true }, // skip duplicate hookup on rebuild
+        );
+    }
+
+    fn freeCString(p: ?*anyopaque) callconv(.c) void {
+        const ptr = p orelse return;
+        const c_ptr: [*:0]u8 = @ptrCast(ptr);
+        const slice = std.mem.span(c_ptr);
+        std.heap.c_allocator.free(slice);
+    }
+
+    fn profileRowActivated(
+        _: *gtk.ListBox,
+        row: *gtk.ListBoxRow,
+        self: *Self,
+    ) callconv(.c) void {
+        const data = gobject.Object.getData(
+            row.as(gobject.Object),
+            "ptyxis-profile-name",
+        ) orelse return;
+        const c_ptr: [*:0]const u8 = @ptrCast(data);
+        const name = std.mem.span(c_ptr);
+        profile_store.switchTo(std.heap.c_allocator, name) catch |err| {
+            log.warn("profile switchTo({s}) failed: {s}", .{ name, @errorName(err) });
+            return;
+        };
+        Application.default().triggerReload();
+        // Re-populate so the active marker moves to the new row.
+        populateProfiles(self);
+        // Reload the row widgets to reflect the new config too.
+        loadCurrentValues(self);
+    }
+
+    fn addProfileClicked(_: *gtk.Button, self: *Self) callconv(.c) void {
+        // Generate a unique default name profile-N; user can rename later
+        // via direct file ops. (A rename dialog can come in a follow-up.)
+        const alloc = std.heap.c_allocator;
+        const profiles = profile_store.list(alloc) catch |err| {
+            log.warn("addProfile list failed: {s}", .{@errorName(err)});
+            return;
+        };
+        defer {
+            for (profiles) |p| p.deinit(alloc);
+            alloc.free(profiles);
+        }
+        var i: usize = profiles.len + 1;
+        const name = while (true) : (i += 1) {
+            var buf: [32]u8 = undefined;
+            const candidate = std.fmt.bufPrint(&buf, "profile-{d}", .{i}) catch return;
+            var taken = false;
+            for (profiles) |p| {
+                if (std.mem.eql(u8, p.name, candidate)) {
+                    taken = true;
+                    break;
+                }
+            }
+            if (!taken) {
+                break alloc.dupe(u8, candidate) catch return;
+            }
+        };
+        defer alloc.free(name);
+        profile_store.add(alloc, name) catch |err| {
+            log.warn("profile add({s}) failed: {s}", .{ name, @errorName(err) });
+            return;
+        };
+        populateProfiles(self);
     }
 
     fn attentionBellChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
@@ -706,6 +942,8 @@ pub const PreferencesWindow = extern struct {
             class.bindTemplateChildPrivate("column_spacing_row", .{});
             class.bindTemplateChildPrivate("tab_position_row", .{});
             class.bindTemplateChildPrivate("use_system_font_switch", .{});
+            class.bindTemplateChildPrivate("profiles_listbox", .{});
+            class.bindTemplateChildPrivate("add_profile_button", .{});
         }
 
         pub const as = C.Class.as;
