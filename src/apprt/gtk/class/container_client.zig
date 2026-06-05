@@ -35,6 +35,7 @@ pub const Error = error{
     SpawnFailed,
     DBusFailed,
     ListContainersFailed,
+    OutOfMemory,
 };
 
 pub const ContainerInfo = struct {
@@ -66,14 +67,16 @@ pub const Client = struct {
     /// `agent_path` is the absolute path to the `ptyxis-agent` executable.
     pub fn spawn(alloc: std.mem.Allocator, agent_path: [:0]const u8) Error!Client {
         // socketpair(AF_UNIX, SOCK_STREAM | CLOEXEC, 0)
-        const pair = posix.socketpair(
+        var pair: [2]std.c.fd_t = undefined;
+        if (std.c.socketpair(
             posix.AF.UNIX,
             posix.SOCK.STREAM | posix.SOCK.CLOEXEC,
             0,
-        ) catch {
+            &pair,
+        ) != 0) {
             log.warn("socketpair failed", .{});
             return Error.SocketpairFailed;
-        };
+        }
 
         // Wrap pair[0] (parent side) as a GSocket. GSocket takes ownership of the fd.
         var gerr: ?*glib.Error = null;
@@ -113,7 +116,7 @@ pub const Client = struct {
 
         // Convert socket → GIOStream. The factory creates a GSocketConnection
         // that owns a ref on the socket.
-        const stream = gio.SocketConnection.connectionFactoryCreateConnection(socket);
+        const stream = gio.Socket.connectionFactoryCreateConnection(socket);
         defer _ = gobject.Object.unref(stream.as(gobject.Object));
 
         const guid = gio.dbusGenerateGuid();
@@ -136,7 +139,9 @@ pub const Client = struct {
             return Error.DBusFailed;
         };
 
-        log.info("ptyxis-agent connected (pid={d})", .{gio.Subprocess.getIdentifier(subprocess)});
+        log.info("ptyxis-agent connected (pid={s})", .{
+            gio.Subprocess.getIdentifier(subprocess) orelse "?",
+        });
 
         return .{
             .alloc = alloc,
@@ -175,7 +180,7 @@ pub const Client = struct {
 
         var n: usize = 0;
         const paths = glib.Variant.getObjv(paths_v, &n);
-        defer glib.free(paths);
+        defer glib.free(@ptrCast(@constCast(paths)));
 
         var list: std.ArrayList(ContainerInfo) = .empty;
         errdefer {
@@ -185,7 +190,7 @@ pub const Client = struct {
 
         var i: usize = 0;
         while (i < n) : (i += 1) {
-            const path: [*:0]const u8 = paths[i];
+            const path: [*:0]const u8 = paths[i] orelse continue;
             const info = self.readContainerProps(std.mem.span(path)) catch |err| {
                 log.warn("failed to read props for {s}: {s}", .{ path, @errorName(err) });
                 continue;
@@ -243,7 +248,7 @@ pub const Client = struct {
     fn dupDictStr(self: *Client, dict: *glib.Variant, key: [:0]const u8) ![:0]u8 {
         // Iterate the a{sv} looking for `key`.
         var iter: glib.VariantIter = undefined;
-        _ = glib.Variant.iterInit(&iter, dict);
+        _ = glib.VariantIter.init(&iter, dict);
 
         const entry_type = glib.VariantType.new("{sv}");
         defer glib.VariantType.free(entry_type);
