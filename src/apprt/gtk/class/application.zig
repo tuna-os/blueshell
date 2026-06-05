@@ -229,6 +229,12 @@ pub const Application = extern struct {
 
         open_uri: OpenURI = undefined,
 
+        /// Connected ptyxis-agent client + cached container list as a
+        /// Gio.ListStore<GhosttyPtyxisContainer>. Both null until startup
+        /// successfully spawns the agent.
+        container_client: ?ContainerClient = null,
+        container_model: ?*gio.ListStore = null,
+
         pub var offset: c_int = 0;
     };
 
@@ -1336,45 +1342,63 @@ pub const Application = extern struct {
         // know if the window will load.
         self.showConfigErrorsDialog();
 
-        // M3 smoke test: spawn ptyxis-agent, list containers, log + tear down.
-        self.smokeTestContainerClient();
+        // Spawn ptyxis-agent and cache the container model. Failure is
+        // non-fatal — Host-only tabs still work without it.
+        self.startupContainerClient();
     }
 
-    fn smokeTestContainerClient(_: *Self) void {
-        const agent_env = std.posix.getenv("PTYXIS_AGENT_PATH") orelse {
-            log.info("PTYXIS_AGENT_PATH unset — skipping container smoke test", .{});
+    fn startupContainerClient(self: *Self) void {
+        const priv = self.private();
+        const alloc = std.heap.c_allocator;
+
+        const agent_path = resolveAgentPath(alloc) catch |err| {
+            log.warn("agent path resolution failed: {s}", .{@errorName(err)});
             return;
         };
-        const alloc = std.heap.c_allocator;
-        const agent_path = alloc.dupeZ(u8, agent_env) catch return;
         defer alloc.free(agent_path);
 
         var client = ContainerClient.spawn(alloc, agent_path) catch |err| {
-            log.warn("container smoke test: spawn failed: {s}", .{@errorName(err)});
+            log.warn("ptyxis-agent spawn failed: {s} (path={s})", .{
+                @errorName(err), agent_path,
+            });
             return;
         };
-        defer client.deinit();
+        errdefer client.deinit();
 
         const store = client.listAsModel() catch |err| {
-            log.warn("container smoke test: listAsModel failed: {s}", .{@errorName(err)});
+            log.warn("ListContainers failed: {s}", .{@errorName(err)});
             return;
         };
-        defer _ = gobject.Object.unref(store.as(gobject.Object));
+
+        priv.container_client = client;
+        priv.container_model = store;
 
         const n = store.as(gio.ListModel).getNItems();
-        log.info("container smoke test: ListStore has {d} items", .{n});
-        var i: c_uint = 0;
-        while (i < n) : (i += 1) {
-            const raw = store.as(gio.ListModel).getItem(i) orelse continue;
-            const obj: *gobject.Object = @ptrCast(@alignCast(raw));
-            defer gobject.Object.unref(obj);
-            const c: *PtyxisContainer = gobject.ext.cast(PtyxisContainer, obj) orelse continue;
-            log.info("  id={s} provider={s} display={s}", .{
-                c.getId() orelse "?",
-                c.getProvider() orelse "?",
-                c.getDisplayName() orelse "?",
-            });
+        log.info("ptyxis-agent ready: {d} containers cached", .{n});
+    }
+
+    /// Find a working ptyxis-agent binary. Honours $PTYXIS_AGENT_PATH first,
+    /// then falls back to a few well-known install locations.
+    fn resolveAgentPath(alloc: std.mem.Allocator) ![:0]u8 {
+        if (std.posix.getenv("PTYXIS_AGENT_PATH")) |p| {
+            return try alloc.dupeZ(u8, p);
         }
+        const candidates = [_][]const u8{
+            "/app/libexec/ptyxis-agent",
+            "/usr/local/libexec/ptyxis-agent",
+            "/usr/libexec/ptyxis-agent",
+        };
+        for (candidates) |c| {
+            std.fs.accessAbsolute(c, .{}) catch continue;
+            return try alloc.dupeZ(u8, c);
+        }
+        return error.AgentNotFound;
+    }
+
+    /// Get the ListModel of containers known to the agent, or null if the
+    /// agent could not be reached. Caller does NOT own a ref.
+    pub fn containerModel(self: *Self) ?*gio.ListStore {
+        return self.private().container_model;
     }
 
     /// Configure libxev to use a specific backend.
