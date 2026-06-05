@@ -57,6 +57,8 @@ pub const ProfileEditor = extern struct {
         font_button: *gtk.FontDialogButton,
         opacity_scale: *gtk.Scale,
         bold_is_bright_row: *adw.SwitchRow,
+        font_thicken_row: *adw.SwitchRow,
+        cursor_opacity_scale: *gtk.Scale,
         backspace_row: *adw.ComboRow,
         delete_row: *adw.ComboRow,
         limit_scrollback_row: *adw.SwitchRow,
@@ -138,6 +140,13 @@ pub const ProfileEditor = extern struct {
             else => false,
         } else false;
         priv.bold_is_bright_row.setActive(if (bib) 1 else 0);
+
+        // Font thicken.
+        priv.font_thicken_row.setActive(if (cfg.@"font-thicken") 1 else 0);
+
+        // Cursor opacity.
+        const cop_adj = gtk.Range.getAdjustment(priv.cursor_opacity_scale.as(gtk.Range));
+        cop_adj.setValue(cfg.@"cursor-opacity");
 
         // Keybindings (Backspace/Delete).
         const backspace_trigger = input.Trigger{ .key = .{ .physical = .backspace } };
@@ -302,6 +311,26 @@ pub const ProfileEditor = extern struct {
         self.syncActiveProfile();
     }
 
+    fn fontThickenChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
+        const priv = self.private();
+        const v: []const u8 = if (row.getActive() != 0) "true" else "false";
+        config_bridge.setKey(std.heap.c_allocator, "font-thicken", v, priv.profile_path) catch |err| {
+            log.warn("font-thicken write failed: {s}", .{@errorName(err)});
+        };
+        self.syncActiveProfile();
+    }
+
+    fn cursorOpacityChanged(adj: *gtk.Adjustment, self: *Self) callconv(.c) void {
+        const priv = self.private();
+        const v = adj.getValue();
+        var buf: [16]u8 = undefined;
+        const slice = std.fmt.bufPrint(&buf, "{d:.2}", .{v}) catch return;
+        config_bridge.setKey(std.heap.c_allocator, "cursor-opacity", slice, priv.profile_path) catch |err| {
+            log.warn("cursor-opacity write failed: {s}", .{@errorName(err)});
+        };
+        self.syncActiveProfile();
+    }
+
     fn backspaceChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
         const priv = self.private();
         const idx = row.getSelected();
@@ -432,6 +461,25 @@ pub const ProfileEditor = extern struct {
         );
 
         _ = gobject.signalConnectData(
+            priv.font_thicken_row.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&fontThickenChanged),
+            self,
+            null,
+            .{},
+        );
+
+        const cop_adj = gtk.Range.getAdjustment(priv.cursor_opacity_scale.as(gtk.Range));
+        _ = gobject.signalConnectData(
+            cop_adj.as(gobject.Object),
+            "value-changed",
+            @ptrCast(&cursorOpacityChanged),
+            self,
+            null,
+            .{},
+        );
+
+        _ = gobject.signalConnectData(
             priv.backspace_row.as(gobject.Object),
             "notify::selected",
             @ptrCast(&backspaceChanged),
@@ -524,6 +572,8 @@ pub const ProfileEditor = extern struct {
             class.bindTemplateChildPrivate("font_button", .{});
             class.bindTemplateChildPrivate("opacity_scale", .{});
             class.bindTemplateChildPrivate("bold_is_bright_row", .{});
+            class.bindTemplateChildPrivate("font_thicken_row", .{});
+            class.bindTemplateChildPrivate("cursor_opacity_scale", .{});
             class.bindTemplateChildPrivate("backspace_row", .{});
             class.bindTemplateChildPrivate("delete_row", .{});
             class.bindTemplateChildPrivate("limit_scrollback_row", .{});
