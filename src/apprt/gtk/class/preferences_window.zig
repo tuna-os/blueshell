@@ -46,6 +46,20 @@ pub const PreferencesWindow = extern struct {
         column_spacing_row: *adw.SpinRow,
         tab_position_row: *adw.ComboRow,
         use_system_font_switch: *gtk.Switch,
+        font_thicken_row: *adw.SwitchRow,
+        window_theme_row: *adw.ComboRow,
+        background_blur_row: *adw.SwitchRow,
+        cursor_opacity_scale: *gtk.Scale,
+        tab_bar_row: *adw.ComboRow,
+        tabs_location_row: *adw.ComboRow,
+        wide_tabs_row: *adw.SwitchRow,
+        window_save_state_row: *adw.ComboRow,
+        mouse_hide_while_typing_row: *adw.SwitchRow,
+        copy_on_select_row: *adw.ComboRow,
+        shell_integration_row: *adw.ComboRow,
+        notify_on_finish_row: *adw.ComboRow,
+        desktop_notifications_row: *adw.SwitchRow,
+        confirm_close_row: *adw.ComboRow,
         scrollbar_row: *adw.ComboRow,
         scroll_on_keystroke_row: *adw.SwitchRow,
         scroll_on_output_row: *adw.SwitchRow,
@@ -204,6 +218,119 @@ pub const PreferencesWindow = extern struct {
             priv.scroll_on_output_row.as(gobject.Object),
             "notify::active",
             @ptrCast(&scrollOnOutputChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.window_theme_row.as(gobject.Object),
+            "notify::selected",
+            @ptrCast(&windowThemeChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.background_blur_row.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&backgroundBlurChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.font_thicken_row.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&fontThickenChanged),
+            self,
+            null,
+            .{},
+        );
+        const cursor_opacity_adj = gtk.Range.getAdjustment(priv.cursor_opacity_scale.as(gtk.Range));
+        _ = gobject.signalConnectData(
+            cursor_opacity_adj.as(gobject.Object),
+            "value-changed",
+            @ptrCast(&cursorOpacityChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.tab_bar_row.as(gobject.Object),
+            "notify::selected",
+            @ptrCast(&tabBarChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.tabs_location_row.as(gobject.Object),
+            "notify::selected",
+            @ptrCast(&tabsLocationChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.wide_tabs_row.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&wideTabsChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.window_save_state_row.as(gobject.Object),
+            "notify::selected",
+            @ptrCast(&windowSaveStateChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.mouse_hide_while_typing_row.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&mouseHideWhileTypingChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.copy_on_select_row.as(gobject.Object),
+            "notify::selected",
+            @ptrCast(&copyOnSelectChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.shell_integration_row.as(gobject.Object),
+            "notify::selected",
+            @ptrCast(&shellIntegrationChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.notify_on_finish_row.as(gobject.Object),
+            "notify::selected",
+            @ptrCast(&notifyOnFinishChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.desktop_notifications_row.as(gobject.Object),
+            "notify::active",
+            @ptrCast(&desktopNotificationsChanged),
+            self,
+            null,
+            .{},
+        );
+        _ = gobject.signalConnectData(
+            priv.confirm_close_row.as(gobject.Object),
+            "notify::selected",
+            @ptrCast(&confirmCloseChanged),
             self,
             null,
             .{},
@@ -696,6 +823,90 @@ pub const PreferencesWindow = extern struct {
         const stb = cfg.@"scroll-to-bottom";
         priv.scroll_on_keystroke_row.setActive(if (stb.keystroke) 1 else 0);
         priv.scroll_on_output_row.setActive(if (stb.output) 1 else 0);
+
+        // Window theme: auto=0, system=1, light=2, dark=3.
+        priv.window_theme_row.setSelected(switch (cfg.@"window-theme") {
+            .auto => 0,
+            .system => 1,
+            .light => 2,
+            .dark => 3,
+            else => 0,
+        });
+
+        // Background blur.
+        const blur_on = switch (cfg.@"background-blur") {
+            .false => false,
+            else => true,
+        };
+        priv.background_blur_row.setActive(if (blur_on) 1 else 0);
+
+        // Font thicken.
+        priv.font_thicken_row.setActive(if (cfg.@"font-thicken") 1 else 0);
+
+        // Cursor opacity.
+        const c_adj = gtk.Range.getAdjustment(priv.cursor_opacity_scale.as(gtk.Range));
+        c_adj.setValue(cfg.@"cursor-opacity");
+
+        // Tab bar: auto=0, always=1, never=2.
+        priv.tab_bar_row.setSelected(switch (cfg.@"window-show-tab-bar") {
+            .auto => 0,
+            .always => 1,
+            .never => 2,
+        });
+
+        // Tabs location: top=0, bottom=1.
+        priv.tabs_location_row.setSelected(switch (cfg.@"gtk-tabs-location") {
+            .top => 0,
+            .bottom => 1,
+        });
+
+        // Wide tabs.
+        priv.wide_tabs_row.setActive(if (cfg.@"gtk-wide-tabs") 1 else 0);
+
+        // Window save state: default=0, never=1, always=2.
+        priv.window_save_state_row.setSelected(switch (cfg.@"window-save-state") {
+            .default => 0,
+            .never => 1,
+            .always => 2,
+        });
+
+        // Mouse hide while typing.
+        priv.mouse_hide_while_typing_row.setActive(if (cfg.@"mouse-hide-while-typing") 1 else 0);
+
+        // Copy on select: false=0, true=1, clipboard=2.
+        priv.copy_on_select_row.setSelected(switch (cfg.@"copy-on-select") {
+            .false => 0,
+            .true => 1,
+            .clipboard => 2,
+        });
+
+        // Shell integration: detect=0, none=1, bash=2, elvish=3, fish=4, nushell=5, zsh=6.
+        priv.shell_integration_row.setSelected(switch (cfg.@"shell-integration") {
+            .detect => 0,
+            .none => 1,
+            .bash => 2,
+            .elvish => 3,
+            .fish => 4,
+            .nushell => 5,
+            .zsh => 6,
+        });
+
+        // Notify on command finish: never=0, unfocused=1, always=2.
+        priv.notify_on_finish_row.setSelected(switch (cfg.@"notify-on-command-finish") {
+            .never => 0,
+            .unfocused => 1,
+            .always => 2,
+        });
+
+        // Desktop notifications.
+        priv.desktop_notifications_row.setActive(if (cfg.@"desktop-notifications") 1 else 0);
+
+        // Confirm close: false=0, true=1, always=2.
+        priv.confirm_close_row.setSelected(switch (cfg.@"confirm-close-surface") {
+            .false => 0,
+            .true => 1,
+            .always => 2,
+        });
     }
 
     fn spacingValueFromConfig(mm: anytype) f64 {
@@ -779,6 +990,178 @@ pub const PreferencesWindow = extern struct {
     fn scrollOnOutputChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
         const priv = self.private();
         writeScrollToBottom(priv.scroll_on_keystroke_row.getActive() != 0, row.getActive() != 0);
+    }
+
+    fn windowThemeChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const value: []const u8 = switch (row.getSelected()) {
+            0 => "auto",
+            1 => "system",
+            2 => "light",
+            3 => "dark",
+            else => return,
+        };
+        config_bridge.setKey(std.heap.c_allocator, "window-theme", value, null) catch |err| {
+            log.warn("window-theme write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn backgroundBlurChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const v: []const u8 = if (row.getActive() != 0) "true" else "false";
+        config_bridge.setKey(std.heap.c_allocator, "background-blur", v, null) catch |err| {
+            log.warn("background-blur write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn fontThickenChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const v: []const u8 = if (row.getActive() != 0) "true" else "false";
+        config_bridge.setKey(std.heap.c_allocator, "font-thicken", v, null) catch |err| {
+            log.warn("font-thicken write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn cursorOpacityChanged(adj: *gtk.Adjustment, _: *Self) callconv(.c) void {
+        const v = adj.getValue();
+        var buf: [16]u8 = undefined;
+        const slice = std.fmt.bufPrint(&buf, "{d:.2}", .{v}) catch return;
+        config_bridge.setKey(std.heap.c_allocator, "cursor-opacity", slice, null) catch |err| {
+            log.warn("cursor-opacity write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn tabBarChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const value: []const u8 = switch (row.getSelected()) {
+            0 => "auto",
+            1 => "always",
+            2 => "never",
+            else => return,
+        };
+        config_bridge.setKey(std.heap.c_allocator, "window-show-tab-bar", value, null) catch |err| {
+            log.warn("window-show-tab-bar write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn tabsLocationChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const value: []const u8 = switch (row.getSelected()) {
+            0 => "top",
+            1 => "bottom",
+            else => return,
+        };
+        config_bridge.setKey(std.heap.c_allocator, "gtk-tabs-location", value, null) catch |err| {
+            log.warn("gtk-tabs-location write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn wideTabsChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const v: []const u8 = if (row.getActive() != 0) "true" else "false";
+        config_bridge.setKey(std.heap.c_allocator, "gtk-wide-tabs", v, null) catch |err| {
+            log.warn("gtk-wide-tabs write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn windowSaveStateChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const value: []const u8 = switch (row.getSelected()) {
+            0 => "default",
+            1 => "never",
+            2 => "always",
+            else => return,
+        };
+        config_bridge.setKey(std.heap.c_allocator, "window-save-state", value, null) catch |err| {
+            log.warn("window-save-state write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn mouseHideWhileTypingChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const v: []const u8 = if (row.getActive() != 0) "true" else "false";
+        config_bridge.setKey(std.heap.c_allocator, "mouse-hide-while-typing", v, null) catch |err| {
+            log.warn("mouse-hide-while-typing write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn copyOnSelectChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const value: []const u8 = switch (row.getSelected()) {
+            0 => "false",
+            1 => "true",
+            2 => "clipboard",
+            else => return,
+        };
+        config_bridge.setKey(std.heap.c_allocator, "copy-on-select", value, null) catch |err| {
+            log.warn("copy-on-select write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn shellIntegrationChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const value: []const u8 = switch (row.getSelected()) {
+            0 => "detect",
+            1 => "none",
+            2 => "bash",
+            3 => "elvish",
+            4 => "fish",
+            5 => "nushell",
+            6 => "zsh",
+            else => return,
+        };
+        config_bridge.setKey(std.heap.c_allocator, "shell-integration", value, null) catch |err| {
+            log.warn("shell-integration write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn notifyOnFinishChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const value: []const u8 = switch (row.getSelected()) {
+            0 => "never",
+            1 => "unfocused",
+            2 => "always",
+            else => return,
+        };
+        config_bridge.setKey(std.heap.c_allocator, "notify-on-command-finish", value, null) catch |err| {
+            log.warn("notify-on-command-finish write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn desktopNotificationsChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const v: []const u8 = if (row.getActive() != 0) "true" else "false";
+        config_bridge.setKey(std.heap.c_allocator, "desktop-notifications", v, null) catch |err| {
+            log.warn("desktop-notifications write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
+    }
+
+    fn confirmCloseChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        const value: []const u8 = switch (row.getSelected()) {
+            0 => "false",
+            1 => "true",
+            2 => "always",
+            else => return,
+        };
+        config_bridge.setKey(std.heap.c_allocator, "confirm-close-surface", value, null) catch |err| {
+            log.warn("confirm-close-surface write: {s}", .{@errorName(err)});
+            return;
+        };
+        Application.default().triggerReload();
     }
 
     fn audibleBellChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
@@ -1068,6 +1451,20 @@ pub const PreferencesWindow = extern struct {
             class.bindTemplateChildPrivate("column_spacing_row", .{});
             class.bindTemplateChildPrivate("tab_position_row", .{});
             class.bindTemplateChildPrivate("use_system_font_switch", .{});
+            class.bindTemplateChildPrivate("font_thicken_row", .{});
+            class.bindTemplateChildPrivate("window_theme_row", .{});
+            class.bindTemplateChildPrivate("background_blur_row", .{});
+            class.bindTemplateChildPrivate("cursor_opacity_scale", .{});
+            class.bindTemplateChildPrivate("tab_bar_row", .{});
+            class.bindTemplateChildPrivate("tabs_location_row", .{});
+            class.bindTemplateChildPrivate("wide_tabs_row", .{});
+            class.bindTemplateChildPrivate("window_save_state_row", .{});
+            class.bindTemplateChildPrivate("mouse_hide_while_typing_row", .{});
+            class.bindTemplateChildPrivate("copy_on_select_row", .{});
+            class.bindTemplateChildPrivate("shell_integration_row", .{});
+            class.bindTemplateChildPrivate("notify_on_finish_row", .{});
+            class.bindTemplateChildPrivate("desktop_notifications_row", .{});
+            class.bindTemplateChildPrivate("confirm_close_row", .{});
             class.bindTemplateChildPrivate("scrollbar_row", .{});
             class.bindTemplateChildPrivate("scroll_on_keystroke_row", .{});
             class.bindTemplateChildPrivate("scroll_on_output_row", .{});
