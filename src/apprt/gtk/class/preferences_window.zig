@@ -1,0 +1,58 @@
+//! Ptyxis-style preferences window. Wraps Adw.PreferencesWindow with a
+//! template loaded from gresource. The UI binds to a config bridge that
+//! reads/writes ~/.config/ghostty/config — not GSettings.
+
+const std = @import("std");
+
+const adw = @import("adw");
+const gobject = @import("gobject");
+const gtk = @import("gtk");
+
+const gresource = @import("../build/gresource.zig");
+const Common = @import("../class.zig").Common;
+
+const log = std.log.scoped(.gtk_ptyxis_preferences);
+
+pub const PreferencesWindow = extern struct {
+    const Self = @This();
+    parent_instance: Parent,
+    pub const Parent = adw.PreferencesWindow;
+    pub const getGObjectType = gobject.ext.defineClass(Self, .{
+        .name = "GhosttyPtyxisPreferencesWindow",
+        .instanceInit = &init,
+        .classInit = &Class.init,
+        .parent_class = &Class.parent,
+    });
+
+    pub fn new() *Self {
+        return gobject.ext.newInstance(Self, .{});
+    }
+
+    fn init(self: *Self, _: *Class) callconv(.c) void {
+        gtk.Widget.initTemplate(self.as(gtk.Widget));
+    }
+
+    const C = Common(Self, null);
+    pub const as = C.as;
+    pub const ref = C.ref;
+    pub const unref = C.unref;
+
+    pub const Class = extern struct {
+        parent_class: Parent.Class,
+        var parent: *Parent.Class = undefined;
+        pub const Instance = Self;
+
+        fn init(class: *Class) callconv(.c) void {
+            gtk.Widget.Class.setTemplateFromResource(
+                class.as(gtk.Widget.Class),
+                comptime gresource.blueprint(.{
+                    .major = 1,
+                    .minor = 5,
+                    .name = "preferences-window",
+                }),
+            );
+        }
+
+        pub const as = C.Class.as;
+    };
+};
