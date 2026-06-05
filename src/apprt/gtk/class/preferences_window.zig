@@ -46,10 +46,7 @@ pub const PreferencesWindow = extern struct {
         column_spacing_row: *adw.SpinRow,
         tab_position_row: *adw.ComboRow,
         use_system_font_switch: *gtk.Switch,
-        font_thicken_row: *adw.SwitchRow,
-        window_theme_row: *adw.ComboRow,
         background_blur_row: *adw.SwitchRow,
-        cursor_opacity_scale: *gtk.Scale,
         tab_bar_row: *adw.ComboRow,
         tabs_location_row: *adw.ComboRow,
         wide_tabs_row: *adw.SwitchRow,
@@ -223,34 +220,9 @@ pub const PreferencesWindow = extern struct {
             .{},
         );
         _ = gobject.signalConnectData(
-            priv.window_theme_row.as(gobject.Object),
-            "notify::selected",
-            @ptrCast(&windowThemeChanged),
-            self,
-            null,
-            .{},
-        );
-        _ = gobject.signalConnectData(
             priv.background_blur_row.as(gobject.Object),
             "notify::active",
             @ptrCast(&backgroundBlurChanged),
-            self,
-            null,
-            .{},
-        );
-        _ = gobject.signalConnectData(
-            priv.font_thicken_row.as(gobject.Object),
-            "notify::active",
-            @ptrCast(&fontThickenChanged),
-            self,
-            null,
-            .{},
-        );
-        const cursor_opacity_adj = gtk.Range.getAdjustment(priv.cursor_opacity_scale.as(gtk.Range));
-        _ = gobject.signalConnectData(
-            cursor_opacity_adj.as(gobject.Object),
-            "value-changed",
-            @ptrCast(&cursorOpacityChanged),
             self,
             null,
             .{},
@@ -824,28 +796,12 @@ pub const PreferencesWindow = extern struct {
         priv.scroll_on_keystroke_row.setActive(if (stb.keystroke) 1 else 0);
         priv.scroll_on_output_row.setActive(if (stb.output) 1 else 0);
 
-        // Window theme: auto=0, system=1, light=2, dark=3.
-        priv.window_theme_row.setSelected(switch (cfg.@"window-theme") {
-            .auto => 0,
-            .system => 1,
-            .light => 2,
-            .dark => 3,
-            else => 0,
-        });
-
         // Background blur.
         const blur_on = switch (cfg.@"background-blur") {
             .false => false,
             else => true,
         };
         priv.background_blur_row.setActive(if (blur_on) 1 else 0);
-
-        // Font thicken.
-        priv.font_thicken_row.setActive(if (cfg.@"font-thicken") 1 else 0);
-
-        // Cursor opacity.
-        const c_adj = gtk.Range.getAdjustment(priv.cursor_opacity_scale.as(gtk.Range));
-        c_adj.setValue(cfg.@"cursor-opacity");
 
         // Tab bar: auto=0, always=1, never=2.
         priv.tab_bar_row.setSelected(switch (cfg.@"window-show-tab-bar") {
@@ -992,45 +948,10 @@ pub const PreferencesWindow = extern struct {
         writeScrollToBottom(priv.scroll_on_keystroke_row.getActive() != 0, row.getActive() != 0);
     }
 
-    fn windowThemeChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const value: []const u8 = switch (row.getSelected()) {
-            0 => "auto",
-            1 => "system",
-            2 => "light",
-            3 => "dark",
-            else => return,
-        };
-        config_bridge.setKey(std.heap.c_allocator, "window-theme", value, null) catch |err| {
-            log.warn("window-theme write: {s}", .{@errorName(err)});
-            return;
-        };
-        Application.default().triggerReload();
-    }
-
     fn backgroundBlurChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
         const v: []const u8 = if (row.getActive() != 0) "true" else "false";
         config_bridge.setKey(std.heap.c_allocator, "background-blur", v, null) catch |err| {
             log.warn("background-blur write: {s}", .{@errorName(err)});
-            return;
-        };
-        Application.default().triggerReload();
-    }
-
-    fn fontThickenChanged(row: *adw.SwitchRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const v: []const u8 = if (row.getActive() != 0) "true" else "false";
-        config_bridge.setKey(std.heap.c_allocator, "font-thicken", v, null) catch |err| {
-            log.warn("font-thicken write: {s}", .{@errorName(err)});
-            return;
-        };
-        Application.default().triggerReload();
-    }
-
-    fn cursorOpacityChanged(adj: *gtk.Adjustment, _: *Self) callconv(.c) void {
-        const v = adj.getValue();
-        var buf: [16]u8 = undefined;
-        const slice = std.fmt.bufPrint(&buf, "{d:.2}", .{v}) catch return;
-        config_bridge.setKey(std.heap.c_allocator, "cursor-opacity", slice, null) catch |err| {
-            log.warn("cursor-opacity write: {s}", .{@errorName(err)});
             return;
         };
         Application.default().triggerReload();
@@ -1451,10 +1372,7 @@ pub const PreferencesWindow = extern struct {
             class.bindTemplateChildPrivate("column_spacing_row", .{});
             class.bindTemplateChildPrivate("tab_position_row", .{});
             class.bindTemplateChildPrivate("use_system_font_switch", .{});
-            class.bindTemplateChildPrivate("font_thicken_row", .{});
-            class.bindTemplateChildPrivate("window_theme_row", .{});
             class.bindTemplateChildPrivate("background_blur_row", .{});
-            class.bindTemplateChildPrivate("cursor_opacity_scale", .{});
             class.bindTemplateChildPrivate("tab_bar_row", .{});
             class.bindTemplateChildPrivate("tabs_location_row", .{});
             class.bindTemplateChildPrivate("wide_tabs_row", .{});
