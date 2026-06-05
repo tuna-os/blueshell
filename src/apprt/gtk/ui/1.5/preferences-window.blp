@@ -36,11 +36,25 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
 
     Adw.PreferencesGroup {
       title: _("Palette");
+      description: _("Pick a color scheme. Writes background, foreground, cursor-color, and palette entries to your config.");
 
-      Adw.ComboRow palette_row {
-        title: _("Color Palette");
-        subtitle: _("Terminal foreground, background, and 16 ANSI colors");
-        model: StringList palette_list {};
+      ScrolledWindow {
+        hscrollbar-policy: never;
+        min-content-height: 320;
+        max-content-height: 480;
+        propagate-natural-height: true;
+
+        FlowBox palette_flowbox {
+          column-spacing: 9;
+          row-spacing: 9;
+          max-children-per-line: 4;
+          selection-mode: none;
+          homogeneous: true;
+          margin-top: 6;
+          margin-bottom: 6;
+          margin-start: 6;
+          margin-end: 6;
+        }
       }
     }
 
