@@ -645,6 +645,16 @@ pub fn init(
             std.fmt.bufPrint(&buf, "0x{x:0>16}", .{self.id}) catch unreachable,
         );
 
+        // If the apprt stashed an external master fd for this surface
+        // (e.g. ptyxis-agent already spawned a shell in a container),
+        // adopt it and skip the fork/exec path.
+        const external_master_fd: ?std.posix.fd_t = ext: {
+            if (@hasDecl(@TypeOf(rt_surface.*), "externalMasterFd")) {
+                break :ext rt_surface.externalMasterFd();
+            }
+            break :ext null;
+        };
+
         // Initialize our IO backend
         var io_exec = try termio.Exec.init(alloc, .{
             .command = command,
@@ -658,6 +668,7 @@ pub fn init(
             .term = config.term,
             .rt_pre_exec_info = .init(config),
             .rt_post_fork_info = .init(config),
+            .external_master_fd = external_master_fd,
         });
         errdefer io_exec.deinit();
 

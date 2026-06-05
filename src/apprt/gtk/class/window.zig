@@ -1981,7 +1981,12 @@ pub const Window = extern struct {
 
         spawnInContainerById(self, id) catch |err| {
             log.warn("spawnInContainerById({s}) failed: {s}", .{ id, @errorName(err) });
+            // Fall back to a host tab on failure so the user gets feedback.
+            self.performBindingAction(.new_tab);
+            return;
         };
+        // Master fd is now stashed on Application; the next surface that
+        // spins up will adopt it. Trigger the new tab.
         self.performBindingAction(.new_tab);
     }
 
@@ -2065,9 +2070,11 @@ pub const Window = extern struct {
         defer self.alloc().free(proc_path);
 
         log.info("Container.Spawn ok: proc_path={s}", .{proc_path});
-        // TODO: hand master_fd to a Ghostty Surface. For now, close it
-        // (the spawned shell will exit when its parent end closes).
-        std.posix.close(master_fd);
+
+        // Stash master_fd on the Application; the next Surface to
+        // initialize (triggered by performBindingAction(.new_tab))
+        // adopts it instead of forking a child of its own.
+        app.setPendingExternalMasterFd(master_fd);
     }
 
     fn alloc(_: *Self) std.mem.Allocator {

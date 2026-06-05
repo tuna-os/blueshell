@@ -950,6 +950,10 @@ pub const Surface = struct {
         };
     }
 
+    pub fn externalMasterFd(_: *const Surface) ?c_int {
+        return null;
+    }
+
     pub fn defaultTermioEnv(self: *const Surface) !std.process.EnvMap {
         const alloc = self.app.core_app.alloc;
         var env = try internal_os.getEnvMap(alloc);
