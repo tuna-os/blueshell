@@ -1,0 +1,172 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $GhosttyPtyxisProfileEditor: Adw.PreferencesWindow {
+  default-height: 550;
+  default-width: 480;
+  title: _("Profile Editor");
+
+  ShortcutController {
+    Shortcut {
+      trigger: "<control>w";
+      action: "action(window.close)";
+    }
+  }
+
+  Adw.PreferencesPage general_page {
+    title: _("Command");
+    icon-name: "utilities-terminal-symbolic";
+
+    Adw.PreferencesGroup {
+      title: _("Command");
+
+      Adw.EntryRow command_entry {
+        title: _("Custom Command");
+      }
+
+      Adw.SwitchRow login_shell_row {
+        title: _("Run as Login Shell");
+      }
+
+      Adw.ComboRow exit_action_row {
+        title: _("When Command Exits");
+        model: StringList {
+          strings [
+            _("Hold terminal open"),
+            _("Restart the command"),
+            _("Close immediately"),
+          ]
+        };
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Title");
+
+      Adw.EntryRow title_prefix_row {
+        title: _("Tab Title Prefix");
+        subtitle: _("Prepended to tab title dynamically");
+      }
+    }
+  }
+
+  Adw.PreferencesPage appearance_page {
+    title: _("Appearance");
+    icon-name: "font-select-symbolic";
+
+    Adw.PreferencesGroup {
+      title: _("Font");
+
+      Adw.ExpanderRow use_system_font_row {
+        title: _("Use System Font");
+        show-enable-switch: false;
+
+        [action]
+        Switch use_system_font_switch {
+          halign: end;
+          valign: center;
+        }
+
+        Adw.ActionRow custom_font_row {
+          title: _("Custom Font");
+          activatable-widget: font_button;
+
+          [suffix]
+          FontDialogButton font_button {
+            valign: center;
+
+            dialog: FontDialog {
+              title: _("Choose a Profile Font");
+              modal: true;
+            };
+          }
+        }
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Visuals");
+
+      Adw.ActionRow {
+        title: _("Transparency");
+        activatable-widget: opacity_scale;
+
+        Scale opacity_scale {
+          orientation: horizontal;
+          width-request: 180;
+          valign: center;
+          draw-value: true;
+          value-pos: right;
+          digits: 2;
+
+          adjustment: Adjustment {
+            lower: 0.0;
+            upper: 1.0;
+            step-increment: 0.05;
+            page-increment: 0.25;
+            value: 1.0;
+          };
+        }
+      }
+
+      Adw.SwitchRow bold_is_bright_row {
+        title: _("Bold is Bright");
+        subtitle: _("Render bold text using bright ANSI colors");
+      }
+    }
+  }
+
+  Adw.PreferencesPage behavior_page {
+    title: _("Behavior");
+    icon-name: "preferences-desktop-accessibility-symbolic";
+
+    Adw.PreferencesGroup {
+      title: _("Compatibility");
+
+      Adw.ComboRow backspace_row {
+        title: _("Backspace Key");
+        model: StringList {
+          strings [
+            _("Automatic"),
+            _("ASCII DEL (\\x7f)"),
+            _("Control-H (\\x08)"),
+            _("Escape sequence (\\x1b[3~)"),
+          ]
+        };
+      }
+
+      Adw.ComboRow delete_row {
+        title: _("Delete Key");
+        model: StringList {
+          strings [
+            _("Automatic"),
+            _("ASCII DEL (\\x7f)"),
+            _("Control-H (\\x08)"),
+            _("Escape sequence (\\x1b[3~)"),
+          ]
+        };
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Scrolling");
+
+      Adw.SwitchRow limit_scrollback_row {
+        title: _("Limit Scrollback");
+      }
+
+      Adw.SpinRow scrollback_limit_row {
+        title: _("Scrollback Lines");
+        sensitive: bind limit_scrollback_row.active;
+
+        adjustment: Adjustment {
+          lower: 0;
+          upper: 1000000;
+          value: 10000;
+          step-increment: 100;
+          page-increment: 1000;
+        };
+      }
+    }
+  }
+}
