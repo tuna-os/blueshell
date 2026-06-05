@@ -1,0 +1,168 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
+  default-height: 700;
+  height-request: 294;
+  width-request: 360;
+  title: _("Preferences");
+
+  ShortcutController {
+    Shortcut {
+      trigger: "<control>w";
+      action: "action(window.close)";
+    }
+  }
+
+  Adw.PreferencesPage appearance_page {
+    title: _("Appearance");
+    icon-name: "applications-graphics-symbolic";
+
+    Adw.PreferencesGroup {
+      title: _("Theme");
+
+      Adw.ComboRow theme_row {
+        title: _("Window Theme");
+        subtitle: _("Choose between light, dark, or system default");
+        model: StringList {
+          strings [
+            _("System"),
+            _("Light"),
+            _("Dark"),
+          ]
+        };
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Palette");
+
+      Adw.ComboRow palette_row {
+        title: _("Color Palette");
+        subtitle: _("Terminal foreground, background, and 16 ANSI colors");
+        model: StringList palette_list {};
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Window");
+
+      Adw.ActionRow {
+        title: _("Transparency");
+        subtitle: _("Reduces the opacity of the background window");
+        activatable-widget: opacity_scale;
+
+        Scale opacity_scale {
+          orientation: horizontal;
+          width-request: 200;
+          valign: center;
+          draw-value: true;
+          value-pos: right;
+
+          adjustment: Adjustment {
+            lower: 0.0;
+            upper: 1.0;
+            step-increment: 0.05;
+            page-increment: 0.1;
+            value: 1.0;
+          };
+        }
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Font");
+
+      Adw.ActionRow font_row {
+        title: _("Terminal Font");
+        subtitle: _("Monospace font used by the terminal");
+        activatable-widget: font_button;
+
+        Button font_button {
+          valign: center;
+          label: _("Choose Font…");
+
+          styles [
+            "flat",
+          ]
+        }
+      }
+
+      Adw.SpinRow font_size_row {
+        title: _("Font Size");
+        subtitle: _("Points");
+
+        adjustment: Adjustment {
+          lower: 4;
+          upper: 96;
+          value: 13;
+          step-increment: 1;
+          page-increment: 2;
+        };
+      }
+    }
+  }
+
+  Adw.PreferencesPage behavior_page {
+    title: _("Behavior");
+    icon-name: "system-run-symbolic";
+
+    Adw.PreferencesGroup {
+      title: _("Terminal");
+
+      Adw.SwitchRow audible_bell_row {
+        title: _("Audible Bell");
+        subtitle: _("Play a sound on terminal bell");
+      }
+
+      Adw.SwitchRow bold_is_bright_row {
+        title: _("Bold is Bright");
+        subtitle: _("Render bold text using bright ANSI colors");
+      }
+
+      Adw.ComboRow cursor_style_row {
+        title: _("Cursor Style");
+        subtitle: _("The shape of the cursor in the terminal");
+        model: StringList {
+          strings [
+            _("Block"),
+            _("Underline"),
+            _("Bar"),
+          ]
+        };
+      }
+
+      Adw.SwitchRow cursor_blink_row {
+        title: _("Blinking Cursor");
+        subtitle: _("Cursor pulses to indicate position");
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Scrollback");
+
+      Adw.SpinRow scrollback_limit_row {
+        title: _("Scrollback Limit");
+        subtitle: _("Number of lines retained for scrollback (0 = unlimited)");
+
+        adjustment: Adjustment {
+          lower: 0;
+          upper: 1000000;
+          value: 10000;
+          step-increment: 100;
+          page-increment: 1000;
+        };
+      }
+    }
+  }
+
+  Adw.PreferencesPage shortcuts_page {
+    title: _("Shortcuts");
+    icon-name: "input-keyboard-symbolic";
+
+    Adw.PreferencesGroup {
+      title: _("Shortcuts");
+      description: _("Keybindings are configured in your config file. This page is a placeholder until the shortcut editor lands.");
+    }
+  }
+}
