@@ -1379,7 +1379,7 @@ pub const Application = extern struct {
         // Optional: smoke test the config-file mutator.
         if (std.posix.getenv("GHOSTTY_PTYXIS_TEST_CONFIG_WRITE")) |val| {
             const cb = @import("config_bridge.zig");
-            cb.setKey(std.heap.c_allocator, "background-opacity", val) catch |err| {
+            cb.setKey(std.heap.c_allocator, "background-opacity", val, null) catch |err| {
                 log.warn("config_bridge.setKey test failed: {s}", .{@errorName(err)});
             };
         }
@@ -1484,7 +1484,6 @@ pub const Application = extern struct {
         }
         log.warn("smoke spawn: no output within timeout", .{});
     }
-
 
     fn startupContainerClient(self: *Self) void {
         const priv = self.private();

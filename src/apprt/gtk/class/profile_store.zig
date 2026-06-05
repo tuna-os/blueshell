@@ -153,7 +153,7 @@ fn profileLess(_: void, a: Profile, b: Profile) bool {
     return std.mem.lessThan(u8, a.name, b.name);
 }
 
-fn copyFile(alloc: Allocator, src: []const u8, dst: []const u8) !void {
+pub fn copyFile(alloc: Allocator, src: []const u8, dst: []const u8) !void {
     const data = blk: {
         const f = std.fs.openFileAbsolute(src, .{}) catch |err| switch (err) {
             // No active config yet — start from empty.
