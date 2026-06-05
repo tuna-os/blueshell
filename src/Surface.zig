@@ -320,6 +320,7 @@ const DerivedConfig = struct {
     selection_word_chars: []const u21,
     vt_kam_allowed: bool,
     wait_after_command: bool,
+    exit_action: configpkg.ExitAction,
     window_padding_top: u32,
     window_padding_bottom: u32,
     window_padding_left: u32,
@@ -399,6 +400,7 @@ const DerivedConfig = struct {
             .selection_word_chars = try alloc.dupe(u21, config.@"selection-word-chars".codepoints),
             .vt_kam_allowed = config.@"vt-kam-allowed",
             .wait_after_command = config.@"wait-after-command",
+            .exit_action = config.@"exit-action",
             .window_padding_top = config.@"window-padding-y".top_left,
             .window_padding_bottom = config.@"window-padding-y".bottom_right,
             .window_padding_left = config.@"window-padding-x".top_left,
@@ -1305,7 +1307,11 @@ fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
 
     // Waiting after command we stop here. The terminal is updated, our
     // state is updated, and now its up to the user to decide what to do.
-    if (self.config.wait_after_command) return;
+    const wait = switch (self.config.exit_action) {
+        .none, .restart => true,
+        .close => self.config.wait_after_command,
+    };
+    if (wait) return;
 
     // If we aren't waiting after the command, then we exit immediately
     // with no confirmation.
