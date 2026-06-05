@@ -49,6 +49,8 @@ comptime {
     _ = ContainerClient.spawn;
     _ = ContainerClient.listContainers;
     _ = ContainerClient.listAsModel;
+    _ = ContainerClient.createPty;
+    _ = ContainerClient.spawnInContainer;
     _ = ContainerClient.deinit;
     _ = PtyxisContainer.new;
     _ = PtyxisContainer.getGObjectType;
@@ -1374,6 +1376,21 @@ pub const Application = extern struct {
             PreferencesWindow.applyPalette(id) catch |err| {
                 log.warn("applyPalette test failed: {s}", .{@errorName(err)});
             };
+        }
+
+        // Optional: smoke test CreatePty via the agent.
+        if (std.posix.getenv("GHOSTTY_PTYXIS_TEST_CREATEPTY")) |_| {
+            const priv2 = self.private();
+            if (priv2.container_client) |*c| {
+                const fd = c.createPty() catch |err| blk: {
+                    log.warn("CreatePty smoke failed: {s}", .{@errorName(err)});
+                    break :blk -1;
+                };
+                if (fd >= 0) {
+                    log.info("CreatePty smoke ok: master fd={d}", .{fd});
+                    std.posix.close(fd);
+                }
+            }
         }
     }
 

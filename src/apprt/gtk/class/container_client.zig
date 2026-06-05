@@ -36,6 +36,8 @@ pub const Error = error{
     SpawnFailed,
     DBusFailed,
     ListContainersFailed,
+    CreatePtyFailed,
+    SpawnInContainerFailed,
     OutOfMemory,
 };
 
@@ -229,6 +231,166 @@ pub const Client = struct {
         }
 
         return list.toOwnedSlice(self.alloc);
+    }
+
+    /// Ask the agent to create a PTY pair. Returns the master fd; the
+    /// caller owns it and must close. The producer (slave) side is fetched
+    /// separately via `createPtyProducer`.
+    pub fn createPty(self: *Client) Error!c_int {
+        var gerr: ?*glib.Error = null;
+        var out_fd_list: *gio.UnixFDList = undefined;
+        const reply_type = glib.VariantType.new("(h)");
+        defer glib.VariantType.free(reply_type);
+
+        const reply = gio.DBusConnection.callWithUnixFdListSync(
+            self.bus,
+            null,
+            AGENT_OBJECT_PATH,
+            AGENT_IFACE,
+            "CreatePty",
+            null,
+            reply_type,
+            .{},
+            5000,
+            null,
+            &out_fd_list,
+            null,
+            &gerr,
+        ) orelse {
+            log.warn("CreatePty: {s}", .{gerrMsg(gerr)});
+            if (gerr) |e| glib.Error.free(e);
+            return Error.CreatePtyFailed;
+        };
+        defer glib.Variant.unref(reply);
+
+        const handle_v = glib.Variant.getChildValue(reply, 0);
+        defer glib.Variant.unref(handle_v);
+        const handle = glib.Variant.getHandle(handle_v);
+
+        defer _ = gobject.Object.unref(out_fd_list.as(gobject.Object));
+        const fd = gio.UnixFDList.get(out_fd_list, handle, &gerr);
+        if (fd < 0) {
+            log.warn("UnixFDList.get(handle={d}): {s}", .{ handle, gerrMsg(gerr) });
+            if (gerr) |e| glib.Error.free(e);
+            return Error.CreatePtyFailed;
+        }
+        return fd;
+    }
+
+    /// Spawn `argv` inside the container at `container_path` with stdio
+    /// wired to `producer_fd`. Returns the spawned process's object path
+    /// (caller-owned, freed via glib.free).
+    ///
+    /// `cwd`, `argv[i]`, env entries are sent as `ay` byte strings (NUL-
+    /// terminated). The agent dups the producer fd before returning, so
+    /// the caller can close it on return.
+    pub fn spawnInContainer(
+        self: *Client,
+        container_path: [:0]const u8,
+        cwd: []const u8,
+        argv: []const []const u8,
+        producer_fd: c_int,
+        env: []const [2][]const u8,
+    ) Error![:0]u8 {
+        // cwd as ay
+        const cwd_v = glib.Variant.newFromData(
+            glib.VariantType.new("ay"),
+            cwd.ptr,
+            cwd.len,
+            1, // trusted
+            null,
+            null,
+        );
+
+        // argv as aay
+        var argv_b: glib.VariantBuilder = undefined;
+        const argv_t = glib.VariantType.new("aay");
+        defer glib.VariantType.free(argv_t);
+        argv_b.init(argv_t);
+        for (argv) |s| {
+            const elem = glib.Variant.newFromData(
+                glib.VariantType.new("ay"),
+                s.ptr,
+                s.len,
+                1,
+                null,
+                null,
+            );
+            argv_b.addValue(elem);
+        }
+
+        // fds as a{uh}: 0,1,2 → producer_fd handle (we'll add it to a
+        // GUnixFDList and reference handle 0 three times).
+        const fd_list = gio.UnixFDList.new();
+        defer _ = gobject.Object.unref(fd_list.as(gobject.Object));
+        var gerr: ?*glib.Error = null;
+        const handle = gio.UnixFDList.append(fd_list, producer_fd, &gerr);
+        if (handle < 0) {
+            if (gerr) |e| glib.Error.free(e);
+            return Error.SpawnInContainerFailed;
+        }
+
+        var fds_b: glib.VariantBuilder = undefined;
+        const fds_t = glib.VariantType.new("a{uh}");
+        defer glib.VariantType.free(fds_t);
+        fds_b.init(fds_t);
+        fds_b.add("{uh}", @as(u32, 0), handle);
+        fds_b.add("{uh}", @as(u32, 1), handle);
+        fds_b.add("{uh}", @as(u32, 2), handle);
+
+        // env as a{ss}
+        var env_b: glib.VariantBuilder = undefined;
+        const env_t = glib.VariantType.new("a{ss}");
+        defer glib.VariantType.free(env_t);
+        env_b.init(env_t);
+        for (env) |pair| {
+            const k_z = std.heap.c_allocator.dupeZ(u8, pair[0]) catch return Error.OutOfMemory;
+            defer std.heap.c_allocator.free(k_z);
+            const v_z = std.heap.c_allocator.dupeZ(u8, pair[1]) catch return Error.OutOfMemory;
+            defer std.heap.c_allocator.free(v_z);
+            env_b.add("{ss}", k_z.ptr, v_z.ptr);
+        }
+
+        // Tuple parameter: (ay, aay, a{uh}, a{ss})
+        var param_b: glib.VariantBuilder = undefined;
+        const param_t = glib.VariantType.new("(ayaaya{uh}a{ss})");
+        defer glib.VariantType.free(param_t);
+        param_b.init(param_t);
+        param_b.addValue(cwd_v);
+        param_b.addValue(argv_b.end());
+        param_b.addValue(fds_b.end());
+        param_b.addValue(env_b.end());
+        const params = param_b.end();
+
+        const reply_type = glib.VariantType.new("(o)");
+        defer glib.VariantType.free(reply_type);
+
+        const reply = gio.DBusConnection.callWithUnixFdListSync(
+            self.bus,
+            null,
+            container_path,
+            CONTAINER_IFACE,
+            "Spawn",
+            params,
+            reply_type,
+            .{},
+            10000,
+            fd_list,
+            null,
+            null,
+            &gerr,
+        ) orelse {
+            log.warn("Container.Spawn: {s}", .{gerrMsg(gerr)});
+            if (gerr) |e| glib.Error.free(e);
+            return Error.SpawnInContainerFailed;
+        };
+        defer glib.Variant.unref(reply);
+
+        const path_v = glib.Variant.getChildValue(reply, 0);
+        defer glib.Variant.unref(path_v);
+        var plen: usize = 0;
+        const p_ptr = glib.Variant.getString(path_v, &plen);
+        return try self.alloc.dupeZ(u8, p_ptr[0..plen]);
     }
 
     fn readContainerProps(self: *Client, object_path: [:0]const u8) !ContainerInfo {
