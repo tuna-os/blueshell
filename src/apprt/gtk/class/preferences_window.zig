@@ -442,28 +442,81 @@ pub const PreferencesWindow = extern struct {
         const palettes = try palette_mod.loadAll(alloc);
         defer alloc.free(palettes);
 
-        for (palettes) |p| {
-            const card = makePaletteCard(p) orelse continue;
+        // Build one big stylesheet that names each card + each dot by
+        // index. Sharing one class name across cards loses styles because
+        // GTK keeps only the last provider's value for a given selector
+        // — give every card a unique class.
+        var css = std.ArrayList(u8){};
+        defer css.deinit(alloc);
+
+        // Card base rules.
+        try css.appendSlice(alloc,
+            \\.ptyxis-pal-card {
+            \\  border-radius: 9px;
+            \\  padding: 6px;
+            \\}
+            \\.ptyxis-pal-card .heading { font-weight: 600; }
+            \\.ptyxis-pal-card .muted { font-style: italic; font-family: monospace; }
+            \\.ptyxis-pal-dot { border-radius: 5px; min-width: 14px; min-height: 14px; }
+            \\
+        );
+
+        for (palettes, 0..) |p, idx| {
+            const v: *const palette_mod.Variant = if (p.dark.background != null) &p.dark else &p.light;
+            const bg = v.background orelse palette_mod.RGB{ .r = 0x20, .g = 0x20, .b = 0x20 };
+            const fg = v.foreground orelse palette_mod.RGB{ .r = 0xe0, .g = 0xe0, .b = 0xe0 };
+            const muted = palette_mod.RGB{
+                .r = @intCast((@as(u16, fg.r) + @as(u16, bg.r) * 2) / 3),
+                .g = @intCast((@as(u16, fg.g) + @as(u16, bg.g) * 2) / 3),
+                .b = @intCast((@as(u16, fg.b) + @as(u16, bg.b) * 2) / 3),
+            };
+            // Per-card colors.
+            try css.writer(alloc).print(
+                \\.pp-card-{d} {{ background: #{x:0>2}{x:0>2}{x:0>2}; }}
+                \\.pp-card-{d} label {{ color: #{x:0>2}{x:0>2}{x:0>2}; }}
+                \\.pp-card-{d} label.muted {{ color: #{x:0>2}{x:0>2}{x:0>2}; }}
+                \\
+            , .{
+                idx, bg.r, bg.g, bg.b,
+                idx, fg.r, fg.g, fg.b,
+                idx, muted.r, muted.g, muted.b,
+            });
+            // Per-dot rules for the 6 indices we render.
+            const want: [6]u4 = .{ 1, 2, 3, 4, 5, 6 };
+            for (want) |ci| {
+                const c = v.colors[ci] orelse continue;
+                try css.writer(alloc).print(
+                    ".pp-card-{d} .pp-dot-{d} {{ background: #{x:0>2}{x:0>2}{x:0>2}; }}\n",
+                    .{ idx, ci, c.r, c.g, c.b },
+                );
+            }
+        }
+
+        const css_z = try alloc.dupeZ(u8, css.items);
+        defer alloc.free(css_z);
+
+        const provider = gtk.CssProvider.new();
+        _ = provider.loadFromString(css_z.ptr);
+        gtk.StyleContext.addProviderForDisplay(
+            gtk.Widget.getDisplay(flowbox.as(gtk.Widget)),
+            provider.as(gtk.StyleProvider),
+            800,
+        );
+        _ = gobject.Object.unref(provider.as(gobject.Object));
+
+        for (palettes, 0..) |p, idx| {
+            const card = makePaletteCard(p, idx) orelse continue;
             flowbox.append(card.as(gtk.Widget));
         }
 
         log.info("populated {d} palettes in flowbox", .{palettes.len});
     }
 
-    /// Build a single Ptyxis-style palette swatch card. Returns null on
-    /// allocator failures; caller appends the result to a container.
-    fn makePaletteCard(p: palette_mod.Palette) ?*gtk.Button {
-        // Prefer the dark variant if it has data, else light.
+    /// Build a single Ptyxis-style palette swatch card. The shared
+    /// stylesheet installed by populatePalettes provides the colors via
+    /// the unique `pp-card-{idx}` class.
+    fn makePaletteCard(p: palette_mod.Palette, idx: usize) ?*gtk.Button {
         const v: *const palette_mod.Variant = if (p.dark.background != null) &p.dark else &p.light;
-        const bg = v.background orelse palette_mod.RGB{ .r = 0x20, .g = 0x20, .b = 0x20 };
-        const fg = v.foreground orelse palette_mod.RGB{ .r = 0xe0, .g = 0xe0, .b = 0xe0 };
-        // For the sample-text colour use a slightly dimmed foreground —
-        // Ptyxis uses an italic muted variant.
-        const muted = palette_mod.RGB{
-            .r = @intCast((@as(u16, fg.r) + @as(u16, bg.r) * 2) / 3),
-            .g = @intCast((@as(u16, fg.g) + @as(u16, bg.g) * 2) / 3),
-            .b = @intCast((@as(u16, fg.b) + @as(u16, bg.b) * 2) / 3),
-        };
 
         // Outer vertical box: name (top), sample (middle), color strip (bottom).
         const box = gtk.Box.new(gtk.Orientation.vertical, 8);
@@ -474,25 +527,15 @@ pub const PreferencesWindow = extern struct {
         box.as(gtk.Widget).setMarginStart(14);
         box.as(gtk.Widget).setMarginEnd(14);
 
-        // Card-level CSS — background and rounded corners coloured by palette bg.
-        const card_css = gtk.CssProvider.new();
-        var card_buf: [192]u8 = undefined;
-        const card_rule = std.fmt.bufPrintZ(&card_buf, ".ptyxis-pal-card{{background:#{x:0>2}{x:0>2}{x:0>2};border-radius:9px;}}.ptyxis-pal-card label{{color:#{x:0>2}{x:0>2}{x:0>2};}}.ptyxis-pal-card label.muted{{color:#{x:0>2}{x:0>2}{x:0>2};font-style:italic;font-family:monospace;}}", .{
-            bg.r, bg.g, bg.b, fg.r, fg.g, fg.b, muted.r, muted.g, muted.b,
-        }) catch return null;
-        _ = card_css.loadFromString(card_rule);
-
-        // Click-target wraps the box.
+        // Click-target wraps the box. Per-card CSS class comes from the
+        // shared stylesheet built in populatePalettes.
         const btn = gtk.Button.new();
         btn.setChild(box.as(gtk.Widget));
         btn.as(gtk.Widget).addCssClass("flat");
         btn.as(gtk.Widget).addCssClass("ptyxis-pal-card");
-        gtk.StyleContext.addProviderForDisplay(
-            (gtk.Widget.getDisplay(btn.as(gtk.Widget))),
-            card_css.as(gtk.StyleProvider),
-            800,
-        );
-        _ = gobject.Object.unref(card_css.as(gobject.Object));
+        var class_buf: [32]u8 = undefined;
+        const cls_z = std.fmt.bufPrintZ(&class_buf, "pp-card-{d}", .{idx}) catch return null;
+        btn.as(gtk.Widget).addCssClass(cls_z.ptr);
 
         // Name row.
         const name_z = std.heap.c_allocator.dupeZ(u8, p.name) catch return null;
@@ -512,27 +555,21 @@ pub const PreferencesWindow = extern struct {
         sample.as(gtk.Widget).addCssClass("muted");
         box.append(sample.as(gtk.Widget));
 
-        // Color strip — 7 representative colors from the ANSI 1..6 + 13.
-        // Matches Ptyxis's row of seven dots.
+        // Color strip — 6 representative ANSI colors 1..6 (red/green/
+        // yellow/blue/magenta/cyan), matching Ptyxis's dot row exactly.
         const strip = gtk.Box.new(gtk.Orientation.horizontal, 6);
         strip.as(gtk.Widget).setMarginTop(4);
-        const want: [7]u4 = .{ 1, 2, 3, 4, 5, 6, 14 };
-        for (want) |i| {
-            const c = v.colors[i] orelse continue;
-            const dot = gtk.DrawingArea.new();
-            dot.as(gtk.Widget).setSizeRequest(18, 18);
-            const dcss = gtk.CssProvider.new();
-            var db: [96]u8 = undefined;
-            const drule = std.fmt.bufPrintZ(&db, "drawingarea{{background:#{x:0>2}{x:0>2}{x:0>2};border-radius:5px;}}", .{
-                c.r, c.g, c.b,
-            }) catch continue;
-            _ = dcss.loadFromString(drule);
-            gtk.StyleContext.addProviderForDisplay(
-                (gtk.Widget.getDisplay(dot.as(gtk.Widget))),
-                dcss.as(gtk.StyleProvider),
-                800,
-            );
-            _ = gobject.Object.unref(dcss.as(gobject.Object));
+        strip.as(gtk.Widget).setHexpand(1);
+        const want: [6]u4 = .{ 1, 2, 3, 4, 5, 6 };
+        for (want) |ci| {
+            if (v.colors[ci] == null) continue;
+            const dot = gtk.Box.new(gtk.Orientation.horizontal, 0);
+            dot.as(gtk.Widget).setSizeRequest(-1, 14);
+            dot.as(gtk.Widget).setHexpand(1);
+            dot.as(gtk.Widget).addCssClass("pp-dot");
+            var dbuf: [32]u8 = undefined;
+            const dot_cls = std.fmt.bufPrintZ(&dbuf, "pp-dot-{d}", .{ci}) catch continue;
+            dot.as(gtk.Widget).addCssClass(dot_cls.ptr);
             strip.append(dot.as(gtk.Widget));
         }
         box.append(strip.as(gtk.Widget));
