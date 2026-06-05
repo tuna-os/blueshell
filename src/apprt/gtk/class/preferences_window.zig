@@ -223,6 +223,18 @@ pub const PreferencesWindow = extern struct {
         group.as(gio.ActionMap).addAction(del_action.as(gio.Action));
         _ = gobject.Object.unref(del_action.as(gobject.Object));
 
+        const edit_action = gio.SimpleAction.new("profile-edit", param_s);
+        _ = gobject.signalConnectData(
+            edit_action.as(gobject.Object),
+            "activate",
+            @ptrCast(&profileEditActivated),
+            self,
+            null,
+            .{},
+        );
+        group.as(gio.ActionMap).addAction(edit_action.as(gio.Action));
+        _ = gobject.Object.unref(edit_action.as(gobject.Object));
+
         self.as(gtk.Widget).insertActionGroup("prefs", group.as(gio.ActionGroup));
         _ = gobject.Object.unref(group.as(gobject.Object));
     }
@@ -257,6 +269,27 @@ pub const PreferencesWindow = extern struct {
             return;
         };
         populateProfiles(self);
+    }
+
+    fn profileEditActivated(
+        _: *gio.SimpleAction,
+        parameter: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const p = parameter orelse return;
+        var len: usize = 0;
+        const c_ptr = glib.Variant.getString(p, &len);
+        const name = c_ptr[0..len];
+        const name_z = std.heap.c_allocator.dupeZ(u8, name) catch return;
+        defer std.heap.c_allocator.free(name_z);
+
+        const ProfileEditor = @import("profile_editor.zig").ProfileEditor;
+        const editor = ProfileEditor.new(name_z) catch |err| {
+            log.warn("failed to open profile editor: {s}", .{@errorName(err)});
+            return;
+        };
+        editor.as(gtk.Window).setTransientFor(self.as(gtk.Window));
+        editor.as(gtk.Window).present();
     }
 
     fn populateProfiles(self: *Self) void {
@@ -306,8 +339,16 @@ pub const PreferencesWindow = extern struct {
                 row.addSuffix(check.as(gtk.Widget));
             }
 
-            // Per-row action menu (Save Changes / Delete).
+            // Per-row action menu (Edit / Save Changes / Delete).
             const menu = gio.Menu.new();
+
+            const edit_item = gio.MenuItem.new("Edit…", null);
+            edit_item.setActionAndTargetValue(
+                "prefs.profile-edit",
+                glib.Variant.newString(name_z.ptr),
+            );
+            menu.appendItem(edit_item);
+            _ = gobject.Object.unref(edit_item.as(gobject.Object));
 
             const save_item = gio.MenuItem.new("Save Changes", null);
             save_item.setActionAndTargetValue(
