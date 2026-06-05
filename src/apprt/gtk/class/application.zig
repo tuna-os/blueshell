@@ -242,6 +242,12 @@ pub const Application = extern struct {
         container_client: ?ContainerClient = null,
         container_model: ?*gio.ListStore = null,
 
+        /// Set by the window's container-spawn path immediately before
+        /// performBindingAction(.new_tab). The next Surface to initialize
+        /// consumes this fd and adopts it instead of forking a child.
+        /// Cleared on consume so it never leaks into an unrelated surface.
+        pending_external_master_fd: ?c_int = null,
+
         pub var offset: c_int = 0;
     };
 
@@ -1563,6 +1569,22 @@ pub const Application = extern struct {
     pub fn containerClient(self: *Self) ?*ContainerClient {
         const priv = self.private();
         return if (priv.container_client) |*c| c else null;
+    }
+
+    /// Stash a master_fd that the next Surface to initialize will adopt.
+    /// Used by the container-spawn path: the agent already created the
+    /// shell process, so the new Surface skips its own fork.
+    pub fn setPendingExternalMasterFd(self: *Self, fd: c_int) void {
+        self.private().pending_external_master_fd = fd;
+    }
+
+    /// Atomically read and clear the pending external master fd. Returns
+    /// null if no container spawn is in flight.
+    pub fn takePendingExternalMasterFd(self: *Self) ?c_int {
+        const priv = self.private();
+        const fd = priv.pending_external_master_fd;
+        priv.pending_external_master_fd = null;
+        return fd;
     }
 
     /// Configure libxev to use a specific backend.
