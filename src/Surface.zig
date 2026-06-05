@@ -1307,11 +1307,20 @@ fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
 
     // Waiting after command we stop here. The terminal is updated, our
     // state is updated, and now its up to the user to decide what to do.
-    const wait = switch (self.config.exit_action) {
-        .none, .restart => true,
-        .close => self.config.wait_after_command,
-    };
-    if (wait) return;
+    switch (self.config.exit_action) {
+        .none => return,
+        .restart => {
+            // Open a fresh tab using the current config, then close this
+            // exited surface. The new tab picks up the latest config so
+            // any profile/command settings are honoured.
+            _ = self.performBindingAction(.new_tab) catch |err| {
+                log.warn("exit-action restart: new_tab failed: {}", .{err});
+            };
+            self.close();
+            return;
+        },
+        .close => if (self.config.wait_after_command) return,
+    }
 
     // If we aren't waiting after the command, then we exit immediately
     // with no confirmation.

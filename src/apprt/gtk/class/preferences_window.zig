@@ -14,6 +14,7 @@ const config_bridge = @import("config_bridge.zig");
 const palette_mod = @import("palette.zig");
 const profile_store = @import("profile_store.zig");
 const Application = @import("application.zig").Application;
+const input = @import("../../../input.zig");
 const gio = @import("gio");
 const glib = @import("glib");
 
@@ -60,6 +61,7 @@ pub const PreferencesWindow = extern struct {
         scrollbar_row: *adw.ComboRow,
         scroll_on_keystroke_row: *adw.SwitchRow,
         scroll_on_output_row: *adw.SwitchRow,
+        shortcuts_listbox: *gtk.ListBox,
         profiles_listbox: *gtk.ListBox,
         add_profile_button: *gtk.Button,
 
@@ -308,6 +310,9 @@ pub const PreferencesWindow = extern struct {
             .{},
         );
 
+        // Shortcuts page: populate keybindings list.
+        populateShortcuts(self);
+
         // Profiles page: populate and wire the Add button.
         populateProfiles(self);
         _ = gobject.signalConnectData(
@@ -363,6 +368,58 @@ pub const PreferencesWindow = extern struct {
 
         self.as(gtk.Widget).insertActionGroup("prefs", group.as(gio.ActionGroup));
         _ = gobject.Object.unref(group.as(gobject.Object));
+    }
+
+    fn populateShortcuts(self: *Self) void {
+        const priv = self.private();
+        const alloc = std.heap.c_allocator;
+
+        // Clear old rows.
+        while (priv.shortcuts_listbox.as(gtk.Widget).getFirstChild()) |child| {
+            priv.shortcuts_listbox.remove(@ptrCast(child));
+        }
+
+        const app = Application.default();
+        const cfg = app.getConfig().get();
+
+        var it = cfg.keybind.set.bindings.iterator();
+        while (it.next()) |entry| {
+            const trigger = entry.key_ptr.*;
+            const value = entry.value_ptr.*;
+            const leaf = switch (value) {
+                .leaf => |l| l,
+                else => continue, // skip leader/chained for now
+            };
+
+            var trigger_buf: [128]u8 = undefined;
+            var trigger_writer: std.Io.Writer = .fixed(&trigger_buf);
+            trigger.format(&trigger_writer) catch continue;
+            const trigger_str = trigger_buf[0..trigger_writer.end];
+
+            var action_buf: [256]u8 = undefined;
+            var action_writer: std.Io.Writer = .fixed(&action_buf);
+            leaf.action.format(&action_writer) catch continue;
+            const action_str = action_buf[0..action_writer.end];
+
+            const trigger_z = alloc.dupeZ(u8, trigger_str) catch continue;
+            defer alloc.free(trigger_z);
+            const action_z = alloc.dupeZ(u8, action_str) catch continue;
+            defer alloc.free(action_z);
+
+            const row = adw.ActionRow.new();
+            row.as(adw.PreferencesRow).setTitle(action_z.ptr);
+            row.setSubtitle(trigger_z.ptr);
+            row.as(gtk.ListBoxRow).setActivatable(0);
+            priv.shortcuts_listbox.append(row.as(gtk.Widget));
+        }
+
+        if (cfg.keybind.set.bindings.count() == 0) {
+            const row = adw.ActionRow.new();
+            row.as(adw.PreferencesRow).setTitle("No custom keybindings");
+            row.setSubtitle("Add `keybind = trigger=action` lines to your config");
+            row.as(gtk.ListBoxRow).setActivatable(0);
+            priv.shortcuts_listbox.append(row.as(gtk.Widget));
+        }
     }
 
     fn profileSaveActivated(
@@ -1132,14 +1189,23 @@ pub const PreferencesWindow = extern struct {
         const palettes = try palette_mod.loadAll(alloc);
         defer alloc.free(palettes);
 
-        // Build one big stylesheet that names each card + each dot by
-        // index. Sharing one class name across cards loses styles because
-        // GTK keeps only the last provider's value for a given selector
-        // — give every card a unique class.
+        try buildPaletteCSS(flowbox.as(gtk.Widget), palettes);
+
+        for (palettes, 0..) |p, idx| {
+            const card = makePaletteCard(p, idx) orelse continue;
+            flowbox.append(card.as(gtk.Widget));
+        }
+
+        log.info("populated {d} palettes in flowbox", .{palettes.len});
+    }
+
+    /// Build and install per-card CSS for a set of palette swatches.
+    /// Must be called before appending cards so the classes are resolved.
+    pub fn buildPaletteCSS(widget: *gtk.Widget, palettes: []const palette_mod.Palette) !void {
+        const alloc = std.heap.c_allocator;
         var css = std.ArrayList(u8){};
         defer css.deinit(alloc);
 
-        // Card base rules.
         try css.appendSlice(alloc,
             \\.ptyxis-pal-card {
             \\  border-radius: 9px;
@@ -1160,7 +1226,6 @@ pub const PreferencesWindow = extern struct {
                 .g = @intCast((@as(u16, fg.g) + @as(u16, bg.g) * 2) / 3),
                 .b = @intCast((@as(u16, fg.b) + @as(u16, bg.b) * 2) / 3),
             };
-            // Per-card colors.
             try css.writer(alloc).print(
                 \\.pp-card-{d} {{ background: #{x:0>2}{x:0>2}{x:0>2}; }}
                 \\.pp-card-{d} label {{ color: #{x:0>2}{x:0>2}{x:0>2}; }}
@@ -1171,7 +1236,6 @@ pub const PreferencesWindow = extern struct {
                 idx, fg.r,    fg.g,    fg.b,
                 idx, muted.r, muted.g, muted.b,
             });
-            // Per-dot rules for the 6 indices we render.
             const want: [6]u4 = .{ 1, 2, 3, 4, 5, 6 };
             for (want) |ci| {
                 const c = v.colors[ci] orelse continue;
@@ -1188,24 +1252,17 @@ pub const PreferencesWindow = extern struct {
         const provider = gtk.CssProvider.new();
         _ = provider.loadFromString(css_z.ptr);
         gtk.StyleContext.addProviderForDisplay(
-            gtk.Widget.getDisplay(flowbox.as(gtk.Widget)),
+            gtk.Widget.getDisplay(widget),
             provider.as(gtk.StyleProvider),
             800,
         );
         _ = gobject.Object.unref(provider.as(gobject.Object));
-
-        for (palettes, 0..) |p, idx| {
-            const card = makePaletteCard(p, idx) orelse continue;
-            flowbox.append(card.as(gtk.Widget));
-        }
-
-        log.info("populated {d} palettes in flowbox", .{palettes.len});
     }
 
     /// Build a single Ptyxis-style palette swatch card. The shared
-    /// stylesheet installed by populatePalettes provides the colors via
+    /// stylesheet installed by buildPaletteCSS provides the colors via
     /// the unique `pp-card-{idx}` class.
-    fn makePaletteCard(p: palette_mod.Palette, idx: usize) ?*gtk.Button {
+    pub fn makePaletteCard(p: palette_mod.Palette, idx: usize) ?*gtk.Button {
         const v: *const palette_mod.Variant = if (p.dark.background != null) &p.dark else &p.light;
 
         // Outer vertical box: name (top), sample (middle), color strip (bottom).
@@ -1292,8 +1349,12 @@ pub const PreferencesWindow = extern struct {
     }
 
     pub fn applyPalette(id: []const u8) !void {
+        try applyPaletteToPath(id, null);
+    }
+
+    /// Apply a palette by id/name, writing to `maybe_path` (null = active config).
+    pub fn applyPaletteToPath(id: []const u8, maybe_path: ?[]const u8) !void {
         const alloc = std.heap.c_allocator;
-        // Find the matching palette.
         const all = try palette_mod.loadAll(alloc);
         defer alloc.free(all);
 
@@ -1309,19 +1370,16 @@ pub const PreferencesWindow = extern struct {
         var hex_buf: [16]u8 = undefined;
         if (v.background) |c| {
             const h = try std.fmt.bufPrint(&hex_buf, "#{x:0>2}{x:0>2}{x:0>2}", .{ c.r, c.g, c.b });
-            try config_bridge.setKey(alloc, "background", h, null);
+            try config_bridge.setKey(alloc, "background", h, maybe_path);
         }
         if (v.foreground) |c| {
             const h = try std.fmt.bufPrint(&hex_buf, "#{x:0>2}{x:0>2}{x:0>2}", .{ c.r, c.g, c.b });
-            try config_bridge.setKey(alloc, "foreground", h, null);
+            try config_bridge.setKey(alloc, "foreground", h, maybe_path);
         }
         if (v.cursor) |c| {
             const h = try std.fmt.bufPrint(&hex_buf, "#{x:0>2}{x:0>2}{x:0>2}", .{ c.r, c.g, c.b });
-            try config_bridge.setKey(alloc, "cursor-color", h, null);
+            try config_bridge.setKey(alloc, "cursor-color", h, maybe_path);
         }
-        // Palette entries: emit one `palette = N=#hex` line per color via
-        // the list-append helper, which removes any existing palette lines
-        // first.
         var entry_storage: [16][16]u8 = undefined;
         var entry_slices: [16][]const u8 = undefined;
         var n_entries: usize = 0;
@@ -1332,10 +1390,10 @@ pub const PreferencesWindow = extern struct {
             n_entries += 1;
         }
         if (n_entries > 0) {
-            try config_bridge.setKeyList(alloc, "palette", entry_slices[0..n_entries], null);
+            try config_bridge.setKeyList(alloc, "palette", entry_slices[0..n_entries], maybe_path);
         }
         log.info("applied palette: {s} ({d} entries)", .{ p.name, n_entries });
-        Application.default().triggerReload();
+        if (maybe_path == null) Application.default().triggerReload();
     }
 
     const C = Common(Self, Private);
@@ -1386,6 +1444,7 @@ pub const PreferencesWindow = extern struct {
             class.bindTemplateChildPrivate("scrollbar_row", .{});
             class.bindTemplateChildPrivate("scroll_on_keystroke_row", .{});
             class.bindTemplateChildPrivate("scroll_on_output_row", .{});
+            class.bindTemplateChildPrivate("shortcuts_listbox", .{});
             class.bindTemplateChildPrivate("profiles_listbox", .{});
             class.bindTemplateChildPrivate("add_profile_button", .{});
         }

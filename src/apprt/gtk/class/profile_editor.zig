@@ -8,6 +8,8 @@ const glib = @import("glib");
 const gresource = @import("../build/gresource.zig");
 const Common = @import("../class.zig").Common;
 const config_bridge = @import("config_bridge.zig");
+const palette_mod = @import("palette.zig");
+const preferences_window = @import("preferences_window.zig");
 const profile_store = @import("profile_store.zig");
 const Application = @import("application.zig").Application;
 const configpkg = @import("../../../config.zig");
@@ -50,6 +52,7 @@ pub const ProfileEditor = extern struct {
         profile_path: ?[]const u8 = null,
 
         // Template bindings
+        palette_flowbox: *gtk.FlowBox,
         command_entry: *adw.EntryRow,
         exit_action_row: *adw.ComboRow,
         title_prefix_row: *adw.EntryRow,
@@ -71,11 +74,69 @@ pub const ProfileEditor = extern struct {
         const self = gobject.ext.newInstance(Self, .{ .@"profile-name" = profile_name });
         try self.loadProfileValues();
         self.wireSignals();
+        populatePalettes(self);
         return self;
     }
 
     fn init(self: *Self, _: *Class) callconv(.c) void {
         gtk.Widget.initTemplate(self.as(gtk.Widget));
+    }
+
+    fn populatePalettes(self: *Self) void {
+        const priv = self.private();
+        const alloc = std.heap.c_allocator;
+        const allocs = palette_mod.loadAll(alloc) catch |err| {
+            log.warn("palette load failed: {s}", .{@errorName(err)});
+            return;
+        };
+        defer alloc.free(allocs);
+
+        preferences_window.PreferencesWindow.buildPaletteCSS(
+            priv.palette_flowbox.as(gtk.Widget),
+            allocs,
+        ) catch |err| {
+            log.warn("palette CSS failed: {s}", .{@errorName(err)});
+        };
+
+        for (allocs, 0..) |p, idx| {
+            const card = preferences_window.PreferencesWindow.makePaletteCard(p, idx) orelse continue;
+            // Attach the profile path so the click handler writes to this profile.
+            const path_z = alloc.dupeZ(u8, priv.profile_path orelse "") catch continue;
+            gobject.Object.setDataFull(
+                card.as(gobject.Object),
+                "ptyxis-profile-path",
+                @ptrCast(@constCast(path_z.ptr)),
+                &freeCString,
+            );
+            _ = gobject.signalConnectData(
+                card.as(gobject.Object),
+                "clicked",
+                @ptrCast(&onPaletteClicked),
+                self,
+                null,
+                .{},
+            );
+            priv.palette_flowbox.append(card.as(gtk.Widget));
+        }
+    }
+
+    fn freeCString(p: ?*anyopaque) callconv(.c) void {
+        const ptr = p orelse return;
+        std.heap.c_allocator.free(std.mem.span(@as([*:0]u8, @ptrCast(ptr))));
+    }
+
+    fn onPaletteClicked(btn: *gtk.Button, self: *Self) callconv(.c) void {
+        const priv = self.private();
+        const id_ptr = gobject.Object.getData(btn.as(gobject.Object), "ptyxis-palette-id") orelse return;
+        const id = std.mem.span(@as([*:0]const u8, @ptrCast(id_ptr)));
+        preferences_window.PreferencesWindow.applyPaletteToPath(
+            id,
+            priv.profile_path,
+        ) catch |err| {
+            log.warn("applyPalette({s}) failed: {s}", .{ id, @errorName(err) });
+            return;
+        };
+        self.syncActiveProfile();
     }
 
     fn loadProfileValues(self: *Self) !void {
@@ -565,6 +626,7 @@ pub const ProfileEditor = extern struct {
                 }),
             );
 
+            class.bindTemplateChildPrivate("palette_flowbox", .{});
             class.bindTemplateChildPrivate("command_entry", .{});
             class.bindTemplateChildPrivate("exit_action_row", .{});
             class.bindTemplateChildPrivate("title_prefix_row", .{});
