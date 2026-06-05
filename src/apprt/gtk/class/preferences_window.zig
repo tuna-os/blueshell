@@ -45,6 +45,9 @@ pub const PreferencesWindow = extern struct {
         font_button: *gtk.FontDialogButton,
         line_spacing_row: *adw.SpinRow,
         column_spacing_row: *adw.SpinRow,
+        show_all_palettes_button: *gtk.Button,
+        show_all_palettes_content: *adw.ButtonContent,
+        palette_showing_all: bool = false,
         tab_position_row: *adw.ComboRow,
         use_system_font_switch: *gtk.Switch,
         background_blur_row: *adw.SwitchRow,
@@ -95,10 +98,18 @@ pub const PreferencesWindow = extern struct {
             .{},
         );
 
-        // Populate palette flowbox.
-        populatePalettes(priv.palette_flowbox) catch |err| {
+        // Populate palette flowbox — featured palettes only by default.
+        populatePalettes(self, false) catch |err| {
             log.warn("populatePalettes failed: {s}", .{@errorName(err)});
         };
+        _ = gobject.signalConnectData(
+            priv.show_all_palettes_button.as(gobject.Object),
+            "clicked",
+            @ptrCast(&showAllPalettesClicked),
+            self,
+            null,
+            .{},
+        );
 
         // Behavior + cursor rows: write to config on change.
         _ = gobject.signalConnectData(
@@ -1184,19 +1195,72 @@ pub const PreferencesWindow = extern struct {
         Application.default().triggerReload();
     }
 
-    fn populatePalettes(flowbox: *gtk.FlowBox) !void {
+    /// IDs of the 11 curated palettes shown on the front page, matching Ptyxis.
+    const featured_palette_ids = [_][]const u8{
+        "campbell",
+        "dracula",
+        "gnome",
+        "high-contrast",
+        "horizon",
+        "linux",
+        "nord",
+        "solarized-dark",
+        "tango",
+        "vs-code",
+        "xterm",
+    };
+
+    fn isFeaturedPalette(id: []const u8) bool {
+        for (featured_palette_ids) |fid| {
+            if (std.ascii.eqlIgnoreCase(id, fid)) return true;
+        }
+        return false;
+    }
+
+    fn showAllPalettesClicked(_: *gtk.Button, self: *Self) callconv(.c) void {
+        const priv = self.private();
+        priv.palette_showing_all = !priv.palette_showing_all;
+
+        // Update button label and icon.
+        if (priv.palette_showing_all) {
+            priv.show_all_palettes_content.setLabel("Show Fewer Palettes");
+            priv.show_all_palettes_content.setIconName("pan-up-symbolic");
+        } else {
+            priv.show_all_palettes_content.setLabel("Show All Palettes");
+            priv.show_all_palettes_content.setIconName("pan-down-symbolic");
+        }
+
+        populatePalettes(self, priv.palette_showing_all) catch |err| {
+            log.warn("populatePalettes failed: {s}", .{@errorName(err)});
+        };
+
+        // Swap flowbox columns: 3 for featured, 2 for all-palettes scroll view.
+        priv.palette_flowbox.setMaxChildrenPerLine(if (priv.palette_showing_all) 2 else 3);
+        priv.palette_flowbox.setMinChildrenPerLine(if (priv.palette_showing_all) 2 else 3);
+    }
+
+    fn populatePalettes(self: *Self, show_all: bool) !void {
+        const priv = self.private();
         const alloc = std.heap.c_allocator;
         const palettes = try palette_mod.loadAll(alloc);
         defer alloc.free(palettes);
 
-        try buildPaletteCSS(flowbox.as(gtk.Widget), palettes);
-
-        for (palettes, 0..) |p, idx| {
-            const card = makePaletteCard(p, idx) orelse continue;
-            flowbox.append(card.as(gtk.Widget));
+        // Clear existing cards.
+        while (priv.palette_flowbox.as(gtk.Widget).getFirstChild()) |child| {
+            priv.palette_flowbox.remove(@ptrCast(child));
         }
 
-        log.info("populated {d} palettes in flowbox", .{palettes.len});
+        try buildPaletteCSS(priv.palette_flowbox.as(gtk.Widget), palettes);
+
+        var shown: usize = 0;
+        for (palettes, 0..) |p, idx| {
+            if (!show_all and !isFeaturedPalette(p.id)) continue;
+            const card = makePaletteCard(p, idx) orelse continue;
+            priv.palette_flowbox.append(card.as(gtk.Widget));
+            shown += 1;
+        }
+
+        log.info("populated {d} palettes in flowbox (show_all={})", .{ shown, show_all });
     }
 
     /// Build and install per-card CSS for a set of palette swatches.
@@ -1416,6 +1480,8 @@ pub const PreferencesWindow = extern struct {
                     .name = "preferences-window",
                 }),
             );
+            class.bindTemplateChildPrivate("show_all_palettes_button", .{});
+            class.bindTemplateChildPrivate("show_all_palettes_content", .{});
             class.bindTemplateChildPrivate("opacity_scale", .{});
             class.bindTemplateChildPrivate("palette_flowbox", .{});
             class.bindTemplateChildPrivate("cursor_shape_row", .{});
