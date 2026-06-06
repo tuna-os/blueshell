@@ -71,10 +71,9 @@ template $GhosttyWindow: Adw.ApplicationWindow {
             focus-on-click: false;
           }
 
-          Gtk.MenuButton {
+          Gtk.MenuButton menu_button {
             notify::active => $notify_menu_active();
             icon-name: "open-menu-symbolic";
-            menu-model: main_menu;
             tooltip-text: _("Main Menu");
             can-focus: false;
           }
@@ -129,14 +128,13 @@ template $GhosttyWindow: Adw.ApplicationWindow {
             focus-on-click: false;
           }
 
-          Gtk.MenuButton {
+          Gtk.MenuButton menu_button_compact {
             styles [
               "flat",
             ]
 
             notify::active => $notify_menu_active();
             icon-name: "open-menu-symbolic";
-            menu-model: main_menu;
             tooltip-text: _("Main Menu");
             can-focus: false;
           }
@@ -199,99 +197,6 @@ menu split_menu {
 // Shortcuts, About. Ghostty extras (Copy, Paste, Splits, Command
 // Palette, Inspector) are reachable via the right-click context menu
 // and the command palette — they're not in this hamburger to keep the
-// Ptyxis visual identity. Accelerator hints render via the standard
-// gtk-popover-menu rule that picks up the action's primary accel.
-menu main_menu {
-  section {
-    label: _("Theme");
-
-    item {
-      label: _("Follow System");
-      action: "win.set-theme";
-      target: "auto";
-    }
-
-    item {
-      label: _("Light");
-      action: "win.set-theme";
-      target: "light";
-    }
-
-    item {
-      label: _("Dark");
-      action: "win.set-theme";
-      target: "dark";
-    }
-  }
-
-  section {
-    item {
-      label: _("Zoom In");
-      action: "win.zoom-in";
-    }
-
-    item {
-      label: _("Zoom Out");
-      action: "win.zoom-out";
-    }
-
-    item {
-      label: _("Reset Zoom");
-      action: "win.zoom-reset";
-    }
-  }
-
-  section {
-    item {
-      label: _("New _Tab");
-      action: "win.new-tab";
-    }
-
-    item {
-      label: _("New _Window");
-      action: "win.new-window";
-    }
-  }
-
-  section {
-    item {
-      label: _("Show Open Tabs");
-      action: "win.tab-overview";
-    }
-  }
-
-  section {
-    item {
-      label: _("Fullscreen");
-      action: "win.fullscreen";
-      hidden-when: "action-disabled";
-    }
-
-    item {
-      label: _("Leave Fullscreen");
-      action: "win.unfullscreen";
-      hidden-when: "action-disabled";
-    }
-  }
-
-  section {
-    item {
-      label: _("_Preferences");
-      action: "app.preferences";
-    }
-
-    item {
-      label: _("_Keyboard Shortcuts");
-      action: "win.show-keyboard-shortcuts";
-      hidden-when: "action-disabled";
-    }
-
-    item {
-      label: _("_About Ghostty");
-      action: "win.about";
-    }
-  }
-}
 
 menu tab_context_menu {
   item {
