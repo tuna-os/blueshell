@@ -1310,13 +1310,16 @@ fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
     switch (self.config.exit_action) {
         .none => return,
         .restart => {
-            // Open a fresh tab using the current config, then close this
-            // exited surface. The new tab picks up the latest config so
-            // any profile/command settings are honoured.
-            _ = self.performBindingAction(.new_tab) catch |err| {
-                log.warn("exit-action restart: new_tab failed: {}", .{err});
-            };
-            self.close();
+            // Reset the terminal so it's blank for the new session.
+            self.renderer_state.mutex.lock();
+            self.renderer_state.terminal.fullReset();
+            self.renderer_state.mutex.unlock();
+
+            // Clear the exited flag so the surface is usable again.
+            self.child_exited = false;
+
+            // Ask the IO thread to restart the subprocess in-place.
+            self.queueIo(.restart_subprocess, .unlocked);
             return;
         },
         .close => if (self.config.wait_after_command) return,
