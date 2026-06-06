@@ -192,6 +192,85 @@ pub fn threadEnter(
     }
 }
 
+/// Restart the subprocess in-place. Called on the IO thread in response to
+/// a `restart_subprocess` mailbox message. Tears down the exited subprocess,
+/// resets the terminal, and starts a fresh one — all without touching the GTK
+/// surface or opening a new tab.
+pub fn restartSubprocess(
+    self: *Exec,
+    alloc: Allocator,
+    io: *termio.Termio,
+    td: *termio.Termio.ThreadData,
+) !void {
+    assert(td.backend == .exec);
+    const data = &td.backend.exec;
+
+    // Stop the PTY reader: write a byte to the quit pipe, then join.
+    _ = posix.write(data.read_thread_pipe, "x") catch {};
+    data.read_thread.join();
+    posix.close(data.read_thread_pipe);
+
+    // Deinit old write stream and process watcher.
+    data.write_stream.deinit();
+    if (data.process) |*p| {
+        p.deinit();
+        data.process = null;
+    }
+
+    // Stop the subprocess (closes PTY slave/master).
+    self.subprocess.stop();
+
+    // Full-reset the terminal so the screen is blank for the new session.
+    io.renderer_state.mutex.lock();
+    io.renderer_state.terminal.fullReset();
+    io.renderer_state.mutex.unlock();
+
+    // Start a fresh subprocess (opens new PTY and forks/execs).
+    const pty_fds = try self.subprocess.start(alloc);
+
+    // New quit pipe for the reader thread.
+    const pipe = try internal_os.pipe();
+
+    // New write stream on the new PTY master write end.
+    const stream = xev.Stream.initFd(pty_fds.write);
+
+    // New reader thread on the new PTY master read end.
+    const read_thread = try std.Thread.spawn(
+        .{},
+        if (comptime builtin.os.tag == .windows) ReadThread.threadMainWindows else ReadThread.threadMainPosix,
+        .{ pty_fds.read, io, pipe[0] },
+    );
+    read_thread.setName("io-reader") catch {};
+
+    // Update all mutable thread-local exec data.
+    data.start = try std.time.Instant.now();
+    data.exited = false;
+    data.write_stream = stream;
+    data.read_thread = read_thread;
+    data.read_thread_fd = pty_fds.read;
+    data.read_thread_pipe = pipe[1];
+
+    // Arm a new process-exit watcher.
+    if (self.subprocess.process) |v| switch (v) {
+        .fork_exec => |cmd| {
+            if (cmd.pid) |pid| {
+                data.process = try xev.Process.init(pid);
+                data.process.?.wait(
+                    td.loop,
+                    &data.process_wait_c,
+                    termio.Termio.ThreadData,
+                    td,
+                    processExit,
+                );
+            }
+        },
+        else => {},
+    };
+
+    // Notify the renderer that it should redraw.
+    try io.renderer_wakeup.notify();
+}
+
 pub fn threadExit(self: *Exec, td: *termio.Termio.ThreadData) void {
     assert(td.backend == .exec);
     const exec = &td.backend.exec;

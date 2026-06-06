@@ -5,6 +5,7 @@
 const std = @import("std");
 
 const adw = @import("adw");
+const gdk = @import("gdk");
 const gobject = @import("gobject");
 const gtk = @import("gtk");
 
@@ -421,6 +422,33 @@ pub const PreferencesWindow = extern struct {
             row.as(adw.PreferencesRow).setTitle(action_z.ptr);
             row.setSubtitle(trigger_z.ptr);
             row.as(gtk.ListBoxRow).setActivatable(0);
+
+            // Edit button — stores action string as GObject data.
+            const edit_btn = gtk.Button.newFromIconName("document-edit-symbolic");
+            edit_btn.as(gtk.Widget).addCssClass("flat");
+            edit_btn.as(gtk.Widget).setValign(.center);
+            edit_btn.as(gtk.Widget).setTooltipText("Edit keybinding");
+            const action_copy = alloc.dupeZ(u8, action_str) catch {
+                alloc.free(trigger_z);
+                alloc.free(action_z);
+                continue;
+            };
+            gobject.Object.setDataFull(
+                edit_btn.as(gobject.Object),
+                "ptyxis-kb-action",
+                @ptrCast(@constCast(action_copy.ptr)),
+                &freeCString,
+            );
+            _ = gobject.signalConnectData(
+                edit_btn.as(gobject.Object),
+                "clicked",
+                @ptrCast(&shortcutEditClicked),
+                self,
+                null,
+                .{},
+            );
+            row.addSuffix(edit_btn.as(gtk.Widget));
+
             priv.shortcuts_listbox.append(row.as(gtk.Widget));
         }
 
@@ -1193,6 +1221,198 @@ pub const PreferencesWindow = extern struct {
             return;
         };
         Application.default().triggerReload();
+    }
+
+    fn shortcutEditClicked(btn: *gtk.Button, self: *Self) callconv(.c) void {
+        const action_ptr = gobject.Object.getData(
+            btn.as(gobject.Object),
+            "ptyxis-kb-action",
+        ) orelse return;
+        const action_z: [*:0]const u8 = @ptrCast(action_ptr);
+
+        const alloc = std.heap.c_allocator;
+
+        // Dialog body: "Press a key combination…"
+        var body_buf: [256]u8 = undefined;
+        const body_z = std.fmt.bufPrintZ(
+            &body_buf,
+            "Press a key combination for: {s}",
+            .{action_z},
+        ) catch return;
+
+        const dlg = adw.AlertDialog.new("Edit Keybinding", body_z.ptr);
+        dlg.addResponse("cancel", "_Cancel");
+
+        // Duplicate action for the capture closure.
+        const action_dup = alloc.dupeZ(u8, std.mem.span(action_z)) catch return;
+        gobject.Object.setDataFull(
+            dlg.as(gobject.Object),
+            "ptyxis-capture-action",
+            @ptrCast(@constCast(action_dup.ptr)),
+            &freeCString,
+        );
+        // Back-reference to prefs window so we can reload shortcuts after capture.
+        gobject.Object.setData(
+            dlg.as(gobject.Object),
+            "ptyxis-prefs-window",
+            self,
+        );
+
+        // Key controller on the dialog to capture the next key press.
+        // Pass the dialog widget as user_data so the handler can close it.
+        const ctrl = gtk.EventControllerKey.new();
+        _ = gobject.signalConnectData(
+            ctrl.as(gobject.Object),
+            "key-pressed",
+            @ptrCast(&shortcutKeyPressed),
+            dlg.as(gtk.Widget),
+            null,
+            .{},
+        );
+        dlg.as(gtk.Widget).addController(ctrl.as(gtk.EventController));
+
+        dlg.as(adw.Dialog).present(self.as(gtk.Widget));
+    }
+
+    fn shortcutKeyPressed(
+        _: *gtk.EventControllerKey,
+        keyval: c_uint,
+        _: c_uint,
+        state: gdk.ModifierType,
+        dlg_widget: *gtk.Widget,
+    ) callconv(.c) c_int {
+        // Ignore bare modifier keys.
+        const is_modifier = keyval == gdk.KEY_Control_L or keyval == gdk.KEY_Control_R or
+            keyval == gdk.KEY_Shift_L or keyval == gdk.KEY_Shift_R or
+            keyval == gdk.KEY_Alt_L or keyval == gdk.KEY_Alt_R or
+            keyval == gdk.KEY_Super_L or keyval == gdk.KEY_Super_R or
+            keyval == gdk.KEY_Meta_L or keyval == gdk.KEY_Meta_R or
+            keyval == gdk.KEY_Hyper_L or keyval == gdk.KEY_Hyper_R;
+        if (is_modifier) return 0;
+
+        // Allow Escape to cancel.
+        if (keyval == gdk.KEY_Escape) {
+            const dlg: *adw.AlertDialog = @ptrCast(@alignCast(dlg_widget));
+            dlg.as(adw.Dialog).forceClose();
+            return 1;
+        }
+
+        // Build Ghostty trigger string: "mods+key"
+        var buf: [128]u8 = undefined;
+        var n: usize = 0;
+
+        if (state.control_mask) {
+            std.mem.copyForwards(u8, buf[n..], "ctrl+");
+            n += 5;
+        }
+        if (state.alt_mask) {
+            std.mem.copyForwards(u8, buf[n..], "alt+");
+            n += 4;
+        }
+        if (state.super_mask) {
+            std.mem.copyForwards(u8, buf[n..], "super+");
+            n += 6;
+        }
+        if (state.shift_mask) {
+            std.mem.copyForwards(u8, buf[n..], "shift+");
+            n += 6;
+        }
+
+        // Key name
+        const key_str = gdkKeyvalToGhostty(keyval);
+        std.mem.copyForwards(u8, buf[n..], key_str);
+        n += key_str.len;
+
+        const trigger_str = buf[0..n];
+
+        // Retrieve action and prefs window from dialog GObject data.
+        const dlg_obj: *gobject.Object = @ptrCast(@alignCast(dlg_widget));
+        const action_ptr = gobject.Object.getData(dlg_obj, "ptyxis-capture-action") orelse return 1;
+        const action_z: [*:0]const u8 = @ptrCast(action_ptr);
+        const action_str = std.mem.span(action_z);
+
+        // Write keybind = trigger=action to config.
+        config_bridge.setKeybind(
+            std.heap.c_allocator,
+            trigger_str,
+            action_str,
+            null,
+        ) catch |err| {
+            log.warn("setKeybind failed: {s}", .{@errorName(err)});
+        };
+        Application.default().triggerReload();
+
+        // Close the dialog.
+        const dlg: *adw.AlertDialog = @ptrCast(@alignCast(dlg_widget));
+        dlg.as(adw.Dialog).forceClose();
+
+        // Reload the shortcuts list.
+        const prefs_ptr = gobject.Object.getData(dlg_obj, "ptyxis-prefs-window");
+        if (prefs_ptr) |p| {
+            const prefs: *Self = @ptrCast(@alignCast(p));
+            populateShortcuts(prefs);
+        }
+
+        return 1;
+    }
+
+    /// Convert a GDK keyval to the Ghostty key name used in keybind config.
+    fn gdkKeyvalToGhostty(keyval: c_uint) []const u8 {
+        return switch (keyval) {
+            gdk.KEY_Return, gdk.KEY_KP_Enter => "enter",
+            gdk.KEY_Escape => "escape",
+            gdk.KEY_Tab, gdk.KEY_KP_Tab => "tab",
+            gdk.KEY_BackSpace => "backspace",
+            gdk.KEY_Delete => "delete",
+            gdk.KEY_Insert => "insert",
+            gdk.KEY_Home => "home",
+            gdk.KEY_End => "end",
+            gdk.KEY_Page_Up => "page_up",
+            gdk.KEY_Page_Down => "page_down",
+            gdk.KEY_Up => "up",
+            gdk.KEY_Down => "down",
+            gdk.KEY_Left => "left",
+            gdk.KEY_Right => "right",
+            gdk.KEY_F1 => "f1",
+            gdk.KEY_F2 => "f2",
+            gdk.KEY_F3 => "f3",
+            gdk.KEY_F4 => "f4",
+            gdk.KEY_F5 => "f5",
+            gdk.KEY_F6 => "f6",
+            gdk.KEY_F7 => "f7",
+            gdk.KEY_F8 => "f8",
+            gdk.KEY_F9 => "f9",
+            gdk.KEY_F10 => "f10",
+            gdk.KEY_F11 => "f11",
+            gdk.KEY_F12 => "f12",
+            gdk.KEY_space => "space",
+            gdk.KEY_minus => "minus",
+            gdk.KEY_equal => "equal",
+            gdk.KEY_bracketleft => "bracketleft",
+            gdk.KEY_bracketright => "bracketright",
+            gdk.KEY_backslash => "backslash",
+            gdk.KEY_semicolon => "semicolon",
+            gdk.KEY_apostrophe => "apostrophe",
+            gdk.KEY_grave => "grave",
+            gdk.KEY_comma => "comma",
+            gdk.KEY_period => "period",
+            gdk.KEY_slash => "slash",
+            else => key: {
+                // For printable ASCII, use the lowercase character.
+                const unicode = gdk.keyvalToUnicode(keyval);
+                if (unicode > 0x20 and unicode < 0x7f) {
+                    // Return single-char slice from a static buffer. Since we
+                    // only use this in one place before copying, a small static
+                    // buffer is safe.
+                    const lower: u8 = std.ascii.toLower(@intCast(unicode & 0x7f));
+                    // Heap-allocate so the slice is stable.
+                    const alloc = std.heap.c_allocator;
+                    const s = alloc.dupe(u8, &[_]u8{lower}) catch break :key "unknown";
+                    break :key s;
+                }
+                break :key "unknown";
+            },
+        };
     }
 
     /// IDs of the 11 curated palettes shown on the front page, matching Ptyxis.

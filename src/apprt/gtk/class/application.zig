@@ -813,13 +813,20 @@ pub const Application = extern struct {
             .search_total => Action.searchTotal(target, value),
             .search_selected => Action.searchSelected(target, value),
 
+            // cell_size fires when the font metrics change (zoom in/out).
+            // The renderer already handles reflowing; we just acknowledge it.
+            // Full window-step-resize support can be added later.
+            .cell_size => return switch (target) {
+                .app => false,
+                .surface => true,
+            },
+
             // Unimplemented
             .secure_input,
             .close_all_windows,
             .float_window,
             .toggle_visibility,
             .toggle_background_opacity,
-            .cell_size,
             .render_inspector,
             .renderer_health,
             .color_change,
