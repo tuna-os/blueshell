@@ -5,7 +5,7 @@ GenericName=Terminal
 Comment=Container-native terminal powered by Ghostty
 Type=Application
 TryExec=ghostty
-Exec=ghostty --gtk-single-instance=true
+Exec=ghostty --gtk-single-instance=false
 Icon=dev.hanthor.GhosttyPtyxis
 Categories=System;TerminalEmulator;
 Keywords=terminal;tty;pty;container;toolbox;distrobox;podman;
@@ -23,4 +23,4 @@ DBusActivatable=false
 
 [Desktop Action new-window]
 Name=New Window
-Exec=ghostty --gtk-single-instance=true
+Exec=ghostty --gtk-single-instance=false
