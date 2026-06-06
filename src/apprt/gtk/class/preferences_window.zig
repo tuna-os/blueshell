@@ -1455,9 +1455,14 @@ pub const PreferencesWindow = extern struct {
             log.warn("populatePalettes failed: {s}", .{@errorName(err)});
         };
 
-        // Cap height when showing all 244 palettes so the group scrolls.
-        // Featured 11 palettes: propagate natural height (no cap needed).
-        priv.palette_scroll.setMaxContentHeight(if (priv.palette_showing_all) 480 else -1);
+        // Show-all: cap height + enable vscroll. Default: natural height, no scrollbar.
+        if (priv.palette_showing_all) {
+            priv.palette_scroll.setMaxContentHeight(480);
+            priv.palette_scroll.setPolicy(.never, .automatic);
+        } else {
+            priv.palette_scroll.setMaxContentHeight(-1);
+            priv.palette_scroll.setPolicy(.never, .never);
+        }
     }
 
     fn populatePalettes(self: *Self, show_all: bool) !void {
