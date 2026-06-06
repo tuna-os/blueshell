@@ -268,6 +268,13 @@ pub const Window = extern struct {
         toast_overlay: *adw.ToastOverlay,
         new_tab_button: *adw.SplitButton,
         new_tab_button_compact: *adw.SplitButton,
+        menu_button: *gtk.MenuButton,
+        menu_button_compact: *gtk.MenuButton,
+        zoom_label: ?*gtk.Label = null,
+        zoom_label_compact: ?*gtk.Label = null,
+        theme_follow: ?*gtk.CheckButton = null,
+        theme_light: ?*gtk.CheckButton = null,
+        theme_dark: ?*gtk.CheckButton = null,
 
         pub var offset: c_int = 0;
     };
@@ -349,6 +356,9 @@ pub const Window = extern struct {
         // no agent is reachable.
         self.refreshContainerMenu();
 
+        // Build the hamburger menu with custom theme + zoom widgets.
+        self.initHamburgerMenu();
+
         // We always sync our appearance at the end because loading our
         // config and such can affect our bindings which are setup initially
         // in initTemplate.
@@ -357,6 +367,257 @@ pub const Window = extern struct {
         // We need to do this so that the title initializes properly,
         // I think because its a dynamic getter.
         self.as(gobject.Object).notifyByPspec(properties.@"active-surface".impl.param_spec);
+    }
+
+    /// Build the Ptyxis-style hamburger menu with custom theme selector
+    /// and zoom-row widgets embedded via gtk_popover_menu_add_child.
+    fn initHamburgerMenu(self: *Self) void {
+        const priv = self.private();
+
+        // ── Build the GMenu model ─────────────────────────────────────────
+        const menu = gio.Menu.new();
+        defer _ = gobject.Object.unref(menu.as(gobject.Object));
+
+        // Section 1: custom theme-selector widget slot
+        const theme_section = gio.Menu.new();
+        defer _ = gobject.Object.unref(theme_section.as(gobject.Object));
+        const theme_item = gio.MenuItem.new(null, null);
+        theme_item.setAttributeValue("custom", glib.Variant.newString("theme-buttons"));
+        theme_section.appendItem(theme_item);
+        _ = gobject.Object.unref(theme_item.as(gobject.Object));
+        menu.appendSection(null, theme_section.as(gio.MenuModel));
+
+        // Section 2: custom zoom widget slot
+        const zoom_section = gio.Menu.new();
+        defer _ = gobject.Object.unref(zoom_section.as(gobject.Object));
+        const zoom_item = gio.MenuItem.new(null, null);
+        zoom_item.setAttributeValue("custom", glib.Variant.newString("zoom-row"));
+        zoom_section.appendItem(zoom_item);
+        _ = gobject.Object.unref(zoom_item.as(gobject.Object));
+        menu.appendSection(null, zoom_section.as(gio.MenuModel));
+
+        // Section 3: New Tab / New Window
+        const tabs_section = gio.Menu.new();
+        defer _ = gobject.Object.unref(tabs_section.as(gobject.Object));
+        tabs_section.append("New _Tab", "win.new-tab");
+        tabs_section.append("New _Window", "win.new-window");
+        menu.appendSection(null, tabs_section.as(gio.MenuModel));
+
+        // Section 4: Tab overview
+        const overview_section = gio.Menu.new();
+        defer _ = gobject.Object.unref(overview_section.as(gobject.Object));
+        overview_section.append("Show Open Tabs", "win.tab-overview");
+        menu.appendSection(null, overview_section.as(gio.MenuModel));
+
+        // Section 5: Fullscreen (hidden-when needs action, skip for now)
+        const fs_section = gio.Menu.new();
+        defer _ = gobject.Object.unref(fs_section.as(gobject.Object));
+        fs_section.append("Fullscreen", "win.fullscreen");
+        fs_section.append("Leave Fullscreen", "win.unfullscreen");
+        menu.appendSection(null, fs_section.as(gio.MenuModel));
+
+        // Section 6: Preferences / About
+        const prefs_section = gio.Menu.new();
+        defer _ = gobject.Object.unref(prefs_section.as(gobject.Object));
+        prefs_section.append("_Preferences", "app.preferences");
+        prefs_section.append("_Keyboard Shortcuts", "win.show-keyboard-shortcuts");
+        prefs_section.append("_About Ghostty", "win.about");
+        menu.appendSection(null, prefs_section.as(gio.MenuModel));
+
+        // Set the menu on both buttons (popover is created lazily on first
+        // use, but MenuButton creates it immediately when a model is set).
+        priv.menu_button.setMenuModel(menu.as(gio.MenuModel));
+        priv.menu_button_compact.setMenuModel(menu.as(gio.MenuModel));
+
+        // Install CSS for the theme-selector circles.
+        installThemeSelectorCSS(priv.menu_button.as(gtk.Widget));
+
+        // Add custom children to both popovers.
+        addHamburgerChildren(self, priv.menu_button, true);
+        addHamburgerChildren(self, priv.menu_button_compact, false);
+    }
+
+    fn installThemeSelectorCSS(widget: *gtk.Widget) void {
+        const css =
+            \\.ptyxis-theme-selector checkbutton {
+            \\  min-width: 44px;
+            \\  min-height: 44px;
+            \\  padding: 1px;
+            \\  background-clip: content-box;
+            \\  border-radius: 9999px;
+            \\  box-shadow: inset 0 0 0 1px alpha(currentColor, 0.2);
+            \\  margin: 6px;
+            \\}
+            \\.ptyxis-theme-selector checkbutton:checked {
+            \\  box-shadow: inset 0 0 0 2px @accent_bg_color;
+            \\}
+            \\.ptyxis-theme-selector checkbutton.follow {
+            \\  background-image: linear-gradient(to bottom right, #fff 49.99%, #202020 50.01%);
+            \\}
+            \\.ptyxis-theme-selector checkbutton.light {
+            \\  background-color: #fff;
+            \\}
+            \\.ptyxis-theme-selector checkbutton.dark {
+            \\  background-color: #202020;
+            \\}
+            \\.ptyxis-theme-selector checkbutton radio {
+            \\  -gtk-icon-source: none;
+            \\  border: none;
+            \\  background: none;
+            \\  box-shadow: none;
+            \\  min-width: 12px;
+            \\  min-height: 12px;
+            \\  padding: 2px;
+            \\}
+            \\.ptyxis-theme-selector checkbutton:checked radio {
+            \\  -gtk-icon-source: -gtk-icontheme("object-select-symbolic");
+            \\  background-color: @accent_bg_color;
+            \\  color: @accent_fg_color;
+            \\  border-radius: 9999px;
+            \\}
+            \\.ptyxis-zoom-row {
+            \\  padding: 0 12px;
+            \\}
+        ;
+        const provider = gtk.CssProvider.new();
+        provider.loadFromString(css);
+        gtk.StyleContext.addProviderForDisplay(
+            gtk.Widget.getDisplay(widget),
+            provider.as(gtk.StyleProvider),
+            600,
+        );
+        _ = gobject.Object.unref(provider.as(gobject.Object));
+    }
+
+    /// Build theme-selector and zoom-row and add them to `button`'s popover.
+    /// `primary` = true for the headerbar button (stores refs for update).
+    fn addHamburgerChildren(self: *Self, button: *gtk.MenuButton, primary: bool) void {
+        const priv = self.private();
+        const popover_widget = button.getPopover() orelse return;
+        const popover: *gtk.PopoverMenu = gobject.ext.cast(gtk.PopoverMenu, popover_widget) orelse return;
+
+        // ── Theme selector ───────────────────────────────────────────────
+        const sel_box = gtk.Box.new(gtk.Orientation.horizontal, 0);
+        sel_box.as(gtk.Widget).addCssClass("ptyxis-theme-selector");
+        sel_box.as(gtk.Widget).setHalign(.center);
+
+        const follow_btn = gtk.CheckButton.new();
+        follow_btn.as(gtk.Widget).addCssClass("follow");
+        follow_btn.as(gtk.Widget).setTooltipText("Follow System Style");
+        follow_btn.as(gtk.Widget).setHexpand(1);
+        follow_btn.as(gtk.Widget).setHalign(.center);
+
+        const light_btn = gtk.CheckButton.new();
+        light_btn.as(gtk.Widget).addCssClass("light");
+        light_btn.as(gtk.Widget).setTooltipText("Light Style");
+        light_btn.as(gtk.Widget).setHexpand(1);
+        light_btn.as(gtk.Widget).setHalign(.center);
+        light_btn.setGroup(follow_btn);
+
+        const dark_btn = gtk.CheckButton.new();
+        dark_btn.as(gtk.Widget).addCssClass("dark");
+        dark_btn.as(gtk.Widget).setTooltipText("Dark Style");
+        dark_btn.as(gtk.Widget).setHexpand(1);
+        dark_btn.as(gtk.Widget).setHalign(.center);
+        dark_btn.setGroup(follow_btn);
+
+        sel_box.append(follow_btn.as(gtk.Widget));
+        sel_box.append(light_btn.as(gtk.Widget));
+        sel_box.append(dark_btn.as(gtk.Widget));
+
+        // Wire theme toggle signals
+        _ = gobject.signalConnectData(follow_btn.as(gobject.Object), "toggled",
+            @ptrCast(&themeFollowToggled), self, null, .{});
+        _ = gobject.signalConnectData(light_btn.as(gobject.Object), "toggled",
+            @ptrCast(&themeLightToggled), self, null, .{});
+        _ = gobject.signalConnectData(dark_btn.as(gobject.Object), "toggled",
+            @ptrCast(&themeDarkToggled), self, null, .{});
+
+        if (primary) {
+            priv.theme_follow = follow_btn;
+            priv.theme_light = light_btn;
+            priv.theme_dark = dark_btn;
+        }
+
+        // Set initial state
+        setThemeCheckButtons(self, follow_btn, light_btn, dark_btn);
+
+        _ = popover.addChild(sel_box.as(gtk.Widget), "theme-buttons");
+
+        // ── Zoom row ─────────────────────────────────────────────────────
+        const zoom_box = gtk.Box.new(gtk.Orientation.horizontal, 6);
+        zoom_box.as(gtk.Widget).addCssClass("ptyxis-zoom-row");
+        zoom_box.as(gtk.Widget).setHexpand(1);
+        zoom_box.as(gtk.Widget).setMarginTop(4);
+        zoom_box.as(gtk.Widget).setMarginBottom(4);
+
+        const zoom_out = gtk.Button.newFromIconName("zoom-out-symbolic");
+        zoom_out.as(gtk.Widget).addCssClass("circular");
+        zoom_out.as(gtk.Widget).addCssClass("flat");
+        zoom_out.as(gtk.Widget).setTooltipText("Zoom Out");
+        zoom_out.as(gtk.Actionable).setActionName("win.zoom-out");
+
+        const zoom_lbl = gtk.Label.new("100%");
+        zoom_lbl.as(gtk.Widget).setHexpand(1);
+        zoom_lbl.as(gtk.Widget).setHalign(.center);
+        zoom_lbl.as(gtk.Widget).addCssClass("flat");
+
+        const zoom_in = gtk.Button.newFromIconName("zoom-in-symbolic");
+        zoom_in.as(gtk.Widget).addCssClass("circular");
+        zoom_in.as(gtk.Widget).addCssClass("flat");
+        zoom_in.as(gtk.Widget).setTooltipText("Zoom In");
+        zoom_in.as(gtk.Actionable).setActionName("win.zoom-in");
+
+        zoom_box.append(zoom_out.as(gtk.Widget));
+        zoom_box.append(zoom_lbl.as(gtk.Widget));
+        zoom_box.append(zoom_in.as(gtk.Widget));
+
+        if (primary) priv.zoom_label = zoom_lbl else priv.zoom_label_compact = zoom_lbl;
+
+        _ = popover.addChild(zoom_box.as(gtk.Widget), "zoom-row");
+    }
+
+    fn setThemeCheckButtons(
+        self: *Self,
+        follow: *gtk.CheckButton,
+        light: *gtk.CheckButton,
+        dark: *gtk.CheckButton,
+    ) void {
+        const app = Application.default();
+        const cfg = app.getConfig().get();
+        const active_idx: usize = switch (cfg.@"window-theme") {
+            .auto, .system => 0,
+            .light => 1,
+            .dark, .ghostty => 2,
+        };
+        _ = self;
+        follow.setActive(if (active_idx == 0) 1 else 0);
+        light.setActive(if (active_idx == 1) 1 else 0);
+        dark.setActive(if (active_idx == 2) 1 else 0);
+    }
+
+    fn themeFollowToggled(btn: *gtk.CheckButton, self: *Self) callconv(.c) void {
+        if (btn.getActive() == 0) return;
+        _ = self;
+        const config_bridge = @import("config_bridge.zig");
+        config_bridge.setKey(std.heap.c_allocator, "window-theme", "auto", null) catch {};
+        Application.default().triggerReload();
+    }
+
+    fn themeLightToggled(btn: *gtk.CheckButton, self: *Self) callconv(.c) void {
+        if (btn.getActive() == 0) return;
+        _ = self;
+        const config_bridge = @import("config_bridge.zig");
+        config_bridge.setKey(std.heap.c_allocator, "window-theme", "light", null) catch {};
+        Application.default().triggerReload();
+    }
+
+    fn themeDarkToggled(btn: *gtk.CheckButton, self: *Self) callconv(.c) void {
+        if (btn.getActive() == 0) return;
+        _ = self;
+        const config_bridge = @import("config_bridge.zig");
+        config_bridge.setKey(std.heap.c_allocator, "window-theme", "dark", null) catch {};
+        Application.default().triggerReload();
     }
 
     /// Setup our action map.
@@ -1193,12 +1454,34 @@ pub const Window = extern struct {
         // Debian 12 is stuck on GTK 4.8
         if (!gtk_version.atLeast(4, 10, 0)) return;
 
-        // We only care if we're activating. If we're activating then
-        // we need to check the validity of our menu items.
+        // We only care if we're activating.
         const active = button.getActive() != 0;
         if (!active) return;
 
         self.syncActions();
+
+        // Update zoom label and theme buttons to reflect current state.
+        const priv = self.private();
+        updateZoomLabel(self);
+        if (priv.theme_follow) |follow| {
+            if (priv.theme_light) |light| {
+                if (priv.theme_dark) |dark| {
+                    setThemeCheckButtons(self, follow, light, dark);
+                }
+            }
+        }
+    }
+
+    fn updateZoomLabel(self: *Self) void {
+        const priv = self.private();
+        const surface = self.getActiveSurface() orelse return;
+        const core = surface.core() orelse return;
+        // font_size and original_font_size are on the core Surface struct.
+        const pct = core.font_size.points / core.config.original_font_size * 100.0;
+        var buf: [16]u8 = undefined;
+        const s = std.fmt.bufPrintZ(&buf, "{d:.0}%", .{pct}) catch return;
+        if (priv.zoom_label) |lbl| lbl.setText(s.ptr);
+        if (priv.zoom_label_compact) |lbl| lbl.setText(s.ptr);
     }
 
     fn propQuickTerminal(
@@ -2445,6 +2728,8 @@ pub const Window = extern struct {
             class.bindTemplateChildPrivate("toast_overlay", .{});
             class.bindTemplateChildPrivate("new_tab_button", .{});
             class.bindTemplateChildPrivate("new_tab_button_compact", .{});
+            class.bindTemplateChildPrivate("menu_button", .{});
+            class.bindTemplateChildPrivate("menu_button_compact", .{});
 
             // Template Callbacks
             class.bindTemplateCallback("realize", &windowRealize);
