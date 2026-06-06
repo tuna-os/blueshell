@@ -45,6 +45,11 @@ pub fn setup(
     command: config.Command,
     env: *EnvMap,
     force_shell: ?Shell,
+    /// When running inside a sandbox (e.g. Flatpak), resource_dir is the
+    /// in-sandbox path used for file existence checks. host_resource_dir is
+    /// the path accessible from the host subprocess (used for env vars like
+    /// ENV). Pass null when not sandboxed; the resource_dir is used for both.
+    host_resource_dir: ?[]const u8,
 ) !?ShellIntegration {
     const shell: Shell = force_shell orelse
         try detectShell(alloc_arena, command) orelse
@@ -55,6 +60,7 @@ pub fn setup(
             alloc_arena,
             command,
             resource_dir,
+            host_resource_dir orelse resource_dir,
             env,
         ),
 
@@ -106,6 +112,7 @@ test "force shell" {
             .{ .shell = "sh" },
             &env,
             shell,
+            null,
         );
         try testing.expectEqual(shell, result.?.shell);
     }
@@ -126,6 +133,7 @@ test "shell integration failure" {
         "/nonexistent",
         .{ .shell = "sh" },
         &env,
+        null,
         null,
     );
 
@@ -299,6 +307,7 @@ fn setupBash(
     alloc: Allocator,
     command: config.Command,
     resource_dir: []const u8,
+    host_resource_dir: []const u8,
     env: *EnvMap,
 ) !?config.Command {
     var stack_fallback = std.heap.stackFallback(4096, alloc);
@@ -367,17 +376,26 @@ fn setupBash(
     }
 
     // Set our new ENV to point to our integration script.
-    var script_path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const script_path = try std.fmt.bufPrint(
-        &script_path_buf,
+    // Use the in-sandbox resource_dir for the file existence check,
+    // but the host_resource_dir for the ENV value (the subprocess may
+    // run outside the sandbox and needs a host-accessible path).
+    var check_path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const check_path = try std.fmt.bufPrint(
+        &check_path_buf,
         "{s}/shell-integration/bash/ghostty.bash",
         .{resource_dir},
     );
-    if (std.fs.openFileAbsolute(script_path, .{})) |file| {
+    var env_path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const env_path = try std.fmt.bufPrint(
+        &env_path_buf,
+        "{s}/shell-integration/bash/ghostty.bash",
+        .{host_resource_dir},
+    );
+    if (std.fs.openFileAbsolute(check_path, .{})) |file| {
         file.close();
-        try env.put("ENV", script_path);
+        try env.put("ENV", env_path);
     } else |err| {
-        log.warn("unable to open {s}: {}", .{ script_path, err });
+        log.warn("unable to open {s}: {}", .{ check_path, err });
         env.remove("GHOSTTY_BASH_ENV");
         return null;
     }
