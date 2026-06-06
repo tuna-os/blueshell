@@ -29,6 +29,9 @@ finish-args:
   # fails and the app silently exits.
   - --own-name=com.mitchellh.ghostty
   - --talk-name=com.mitchellh.ghostty
+  # Belt-and-suspenders: ensure Ghostty finds shell-integration inside
+  # the sandbox even if -Dflatpak binary-path resolution falls back.
+  - --env=GHOSTTY_RESOURCES_DIR=/app/share/ghostty
 
 cleanup:
   - /include
