@@ -24,7 +24,11 @@ finish-args:
   - --talk-name=org.freedesktop.Flatpak
   # podman socket (containers picker)
   - --filesystem=xdg-run/podman
-  # toolbox / distrobox use podman too; nothing extra needed
+  # Ghostty registers its GTK application on the session bus under its
+  # upstream app-id. Without owning this name the single-instance guard
+  # fails and the app silently exits.
+  - --own-name=com.mitchellh.ghostty
+  - --talk-name=com.mitchellh.ghostty
 
 cleanup:
   - /include
