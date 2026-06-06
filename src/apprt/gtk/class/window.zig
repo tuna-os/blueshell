@@ -420,7 +420,6 @@ pub const Window = extern struct {
         const prefs_section = gio.Menu.new();
         defer _ = gobject.Object.unref(prefs_section.as(gobject.Object));
         prefs_section.append("_Preferences", "app.preferences");
-        prefs_section.append("_Keyboard Shortcuts", "win.show-keyboard-shortcuts");
         prefs_section.append("_About Ghostty", "win.about");
         menu.appendSection(null, prefs_section.as(gio.MenuModel));
 
@@ -652,6 +651,9 @@ pub const Window = extern struct {
             .init("zoom-in", actionZoomIn, null),
             .init("zoom-out", actionZoomOut, null),
             .init("zoom-reset", actionZoomReset, null),
+            .init("fullscreen", actionFullscreen, null),
+            .init("unfullscreen", actionUnfullscreen, null),
+            .init("tab-overview", actionTabOverview, null),
         };
 
         ext.actions.add(Self, self, &actions);
@@ -2482,6 +2484,30 @@ pub const Window = extern struct {
         self: *Self,
     ) callconv(.c) void {
         self.performBindingAction(.{ .reset_font_size = {} });
+    }
+
+    fn actionFullscreen(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        self.as(gtk.Window).fullscreen();
+    }
+
+    fn actionUnfullscreen(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        self.as(gtk.Window).unfullscreen();
+    }
+
+    fn actionTabOverview(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        self.toggleTabOverview();
     }
 
     fn actionPromptContextTabTitle(

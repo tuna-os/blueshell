@@ -33,20 +33,22 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
         }
       }
 
-      // Default: 11 curated palettes, 3 columns, no scroll.
-      // When "Show All" is pressed this flowbox is replaced by a
-      // scrollable one containing all 244 palettes.
-      FlowBox palette_flowbox {
-        column-spacing: 9;
-        row-spacing: 9;
-        min-children-per-line: 3;
-        max-children-per-line: 3;
-        selection-mode: none;
-        homogeneous: true;
-        margin-top: 6;
-        margin-bottom: 6;
-        margin-start: 6;
-        margin-end: 6;
+      ScrolledWindow palette_scroll {
+        hscrollbar-policy: never;
+        propagate-natural-height: true;
+
+        FlowBox palette_flowbox {
+          column-spacing: 9;
+          row-spacing: 9;
+          min-children-per-line: 3;
+          max-children-per-line: 3;
+          selection-mode: none;
+          homogeneous: true;
+          margin-top: 6;
+          margin-bottom: 6;
+          margin-start: 6;
+          margin-end: 6;
+        }
       }
     }
 
