@@ -647,7 +647,14 @@ pub const Config = struct {
     shell_integration_features: configpkg.Config.ShellIntegrationFeatures = .{},
     cursor_blink: ?bool = null,
     working_directory: ?[]const u8 = null,
+    /// Path to Ghostty resources accessible from the HOST (subprocess env).
+    /// On Flatpak this is the real filesystem path outside the sandbox.
     resources_dir: ?[]const u8,
+
+    /// Path to Ghostty resources accessible from INSIDE the app sandbox.
+    /// Used for reading shell-integration scripts during exec setup.
+    /// Falls back to resources_dir when not set (non-sandboxed case).
+    app_resources_dir: ?[]const u8 = null,
     term: []const u8,
 
     rt_pre_exec_info: Command.RtPreExecInfo,
@@ -874,7 +881,9 @@ const Subprocess = struct {
                 .zsh => .zsh,
             };
 
-            const dir = cfg.resources_dir orelse {
+            // Use the in-sandbox app path for file access; fall back to
+            // the host path in non-sandboxed environments.
+            const dir = (cfg.app_resources_dir orelse cfg.resources_dir) orelse {
                 log.warn("no resources dir set, shell integration disabled", .{});
                 break :shell default_shell_command;
             };

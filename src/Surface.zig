@@ -667,6 +667,7 @@ pub fn init(
             .cursor_blink = config.@"cursor-style-blink",
             .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
             .resources_dir = global_state.resources_dir.host(),
+            .app_resources_dir = global_state.resources_dir.app(),
             .term = config.term,
             .rt_pre_exec_info = .init(config),
             .rt_post_fork_info = .init(config),
