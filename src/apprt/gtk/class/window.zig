@@ -525,22 +525,23 @@ pub const Window = extern struct {
         sel_box.append(light_btn.as(gtk.Widget));
         sel_box.append(dark_btn.as(gtk.Widget));
 
-        // Wire theme toggle signals
-        _ = gobject.signalConnectData(follow_btn.as(gobject.Object), "toggled",
-            @ptrCast(&themeFollowToggled), self, null, .{});
-        _ = gobject.signalConnectData(light_btn.as(gobject.Object), "toggled",
-            @ptrCast(&themeLightToggled), self, null, .{});
-        _ = gobject.signalConnectData(dark_btn.as(gobject.Object), "toggled",
-            @ptrCast(&themeDarkToggled), self, null, .{});
-
         if (primary) {
             priv.theme_follow = follow_btn;
             priv.theme_light = light_btn;
             priv.theme_dark = dark_btn;
         }
 
-        // Set initial state
+        // Set initial state BEFORE wiring signals so setActive() doesn't
+        // trigger spurious config writes during init.
         setThemeCheckButtons(self, follow_btn, light_btn, dark_btn);
+
+        // Wire theme toggle signals (after initial state is set).
+        _ = gobject.signalConnectData(follow_btn.as(gobject.Object), "toggled",
+            @ptrCast(&themeFollowToggled), self, null, .{});
+        _ = gobject.signalConnectData(light_btn.as(gobject.Object), "toggled",
+            @ptrCast(&themeLightToggled), self, null, .{});
+        _ = gobject.signalConnectData(dark_btn.as(gobject.Object), "toggled",
+            @ptrCast(&themeDarkToggled), self, null, .{});
 
         _ = popover.addChild(sel_box.as(gtk.Widget), "theme-buttons");
 
