@@ -894,6 +894,7 @@ const Subprocess = struct {
                 default_shell_command,
                 &env,
                 force,
+                cfg.resources_dir, // host path for ENV var (subprocess on host)
             ) orelse {
                 log.warn("shell could not be detected, no automatic shell integration will be injected", .{});
                 break :shell default_shell_command;
