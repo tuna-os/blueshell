@@ -409,11 +409,10 @@ pub const Window = extern struct {
         overview_section.append("Show Open Tabs", "win.tab-overview");
         menu.appendSection(null, overview_section.as(gio.MenuModel));
 
-        // Section 5: Fullscreen (hidden-when needs action, skip for now)
+        // Section 5: Fullscreen toggle.
         const fs_section = gio.Menu.new();
         defer _ = gobject.Object.unref(fs_section.as(gobject.Object));
         fs_section.append("Fullscreen", "win.fullscreen");
-        fs_section.append("Leave Fullscreen", "win.unfullscreen");
         menu.appendSection(null, fs_section.as(gio.MenuModel));
 
         // Section 6: Preferences / About
