@@ -48,6 +48,7 @@ pub const PreferencesWindow = extern struct {
         column_spacing_row: *adw.SpinRow,
         show_all_palettes_button: *gtk.Button,
         show_all_palettes_content: *adw.ButtonContent,
+        palette_scroll: *gtk.ScrolledWindow,
         palette_showing_all: bool = false,
         tab_position_row: *adw.ComboRow,
         use_system_font_switch: *gtk.Switch,
@@ -1454,9 +1455,9 @@ pub const PreferencesWindow = extern struct {
             log.warn("populatePalettes failed: {s}", .{@errorName(err)});
         };
 
-        // Swap flowbox columns: 3 for featured, 2 for all-palettes scroll view.
-        priv.palette_flowbox.setMaxChildrenPerLine(if (priv.palette_showing_all) 2 else 3);
-        priv.palette_flowbox.setMinChildrenPerLine(if (priv.palette_showing_all) 2 else 3);
+        // Cap height when showing all 244 palettes so the group scrolls.
+        // Featured 11 palettes: propagate natural height (no cap needed).
+        priv.palette_scroll.setMaxContentHeight(if (priv.palette_showing_all) 480 else -1);
     }
 
     fn populatePalettes(self: *Self, show_all: bool) !void {
@@ -1702,6 +1703,7 @@ pub const PreferencesWindow = extern struct {
             );
             class.bindTemplateChildPrivate("show_all_palettes_button", .{});
             class.bindTemplateChildPrivate("show_all_palettes_content", .{});
+            class.bindTemplateChildPrivate("palette_scroll", .{});
             class.bindTemplateChildPrivate("opacity_scale", .{});
             class.bindTemplateChildPrivate("palette_flowbox", .{});
             class.bindTemplateChildPrivate("cursor_shape_row", .{});
