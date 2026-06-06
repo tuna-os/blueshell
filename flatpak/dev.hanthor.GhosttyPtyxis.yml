@@ -4,6 +4,11 @@ runtime-version: "50"
 sdk: org.gnome.Sdk
 default-branch: master
 command: ghostty
+
+# Rename Ghostty's upstream assets to our app-id so the shell picks us up.
+rename-icon: com.mitchellh.ghostty
+rename-appdata-file: com.mitchellh.ghostty.metainfo.xml
+
 finish-args:
   # 3D rendering
   - --device=dri
@@ -20,6 +25,7 @@ finish-args:
   # podman socket (containers picker)
   - --filesystem=xdg-run/podman
   # toolbox / distrobox use podman too; nothing extra needed
+
 cleanup:
   - /include
   - /lib/girepository-1.0
@@ -59,6 +65,9 @@ modules:
         --prefix /app
         --search-prefix /app
         --system $PWD/vendor/p
+      # Install our custom desktop file (overrides the upstream one).
+      - install -Dm644 flatpak/dev.hanthor.GhosttyPtyxis.desktop
+          /app/share/applications/dev.hanthor.GhosttyPtyxis.desktop
     sources:
       - type: dir
         path: ..
