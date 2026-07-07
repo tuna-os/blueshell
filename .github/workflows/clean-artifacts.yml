@@ -4,6 +4,10 @@ on:
     # Once a day
     - cron: "0 0 * * *"
   workflow_dispatch:
+
+permissions:
+  actions: write
+
 jobs:
   remove-old-artifacts:
     runs-on: ubuntu-latest
