@@ -62,10 +62,7 @@ pub fn parse(id: []const u8, bytes: []const u8) Palette {
         const line = std.mem.trim(u8, raw_line, " \t\r");
         if (line.len == 0 or line[0] == '#' or line[0] == ';') continue;
         if (line[0] == '[') {
-            if (std.mem.eql(u8, line, "[Palette]")) section = .palette
-            else if (std.mem.eql(u8, line, "[Light]")) section = .light
-            else if (std.mem.eql(u8, line, "[Dark]")) section = .dark
-            else section = .none;
+            if (std.mem.eql(u8, line, "[Palette]")) section = .palette else if (std.mem.eql(u8, line, "[Light]")) section = .light else if (std.mem.eql(u8, line, "[Dark]")) section = .dark else section = .none;
             continue;
         }
 

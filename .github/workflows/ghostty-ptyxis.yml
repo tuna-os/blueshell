@@ -1,4 +1,4 @@
-name: GhosttyPtyxis Flatpak
+name: BlueShell Flatpak
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
       - name: Build Flatpak bundle
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
-          bundle: GhosttyPtyxis.flatpak
-          manifest-path: flatpak/dev.hanthor.GhosttyPtyxis.yml
+          bundle: BlueShell.flatpak
+          manifest-path: flatpak/dev.hanthor.BlueShell.yml
           cache-key: flatpak-builder-${{ github.sha }}
           upload-artifact: true

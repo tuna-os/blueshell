@@ -1,0 +1,122 @@
+name: ptyxis-tests
+
+# Fork-owned test workflow (upstream's test.yml is gated to
+# ghostty-org/ghostty and never runs here). Three lanes:
+#
+#   fmt   — zig fmt --check on the fork-owned sources
+#   unit  — Zig unit + integration tests for the Ptyxis preference UI
+#           logic (config bridge, profile store, preference mappings,
+#           real-config-parser round trips)
+#   smoke — build the app and run the headless UI smoke test under Xvfb
+#
+# See TESTING.md for the architecture.
+
+on:
+  push:
+    branches: [ptyxis-port]
+  pull_request: {}
+  workflow_dispatch: {}
+
+concurrency:
+  group: ptyxis-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ZIG_VERSION: 0.15.2
+
+jobs:
+  test:
+    name: Unit + integration tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK/libadwaita toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-4-dev libadwaita-1-dev gettext libbz2-dev libonig-dev \
+            libxml2-utils python3-gi xvfb dbus dbus-x11
+
+      - name: Install blueprint-compiler 0.16 (Ubuntu 24.04 ships 0.12)
+        run: |
+          git clone --depth 1 -b v0.16.0 \
+            https://gitlab.gnome.org/GNOME/blueprint-compiler.git "$HOME/blueprint-compiler"
+          mkdir -p "$HOME/.local/bin"
+          # Running from a git checkout reports '--version: uninstalled',
+          # which Ghostty's semver check can't parse — answer it ourselves.
+          cat > "$HOME/.local/bin/blueprint-compiler" <<EOF
+          #!/bin/sh
+          if [ "\$1" = "--version" ]; then echo 0.16.0; exit 0; fi
+          exec python3 "$HOME/blueprint-compiler/blueprint-compiler.py" "\$@"
+          EOF
+          chmod +x "$HOME/.local/bin/blueprint-compiler"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install Zig
+        run: |
+          curl -sSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" | tar xJ -C "$HOME"
+          echo "$HOME/zig-x86_64-linux-${ZIG_VERSION}" >> "$GITHUB_PATH"
+
+      - name: zig fmt check (fork-owned sources)
+        run: |
+          zig fmt --check \
+            src/apprt/gtk/class/preferences_window.zig \
+            src/apprt/gtk/class/preferences_logic.zig \
+            src/apprt/gtk/class/profile_editor.zig \
+            src/apprt/gtk/class/profile_store.zig \
+            src/apprt/gtk/class/config_bridge.zig \
+            src/apprt/gtk/class/palette.zig \
+            src/apprt/gtk/class/palettes_embed.zig
+
+      - name: Cache zig packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/zig
+          key: zig-pkg-${{ hashFiles('build.zig.zon') }}
+
+      # Dependency mirrors (gitlab.freedesktop.org especially) throw
+      # transient 5xx; retry the fetch before it can fail a test step.
+      - name: Fetch zig dependencies (with retry)
+        run: |
+          # NB: steps run under bash -e; keep the failing command inside
+          # an `if` so the loop actually retries.
+          for i in 1 2 3 4 5; do
+            # =all: plain --fetch skips lazy deps (wayland-protocols is
+            # lazy), which then get fetched — and can 504 — mid-test-step.
+            if zig build --fetch=all -fno-sys=gtk4-layer-shell; then exit 0; fi
+            echo "fetch attempt $i failed; retrying in $((i*30))s"
+            sleep $((i*30))
+          done
+          exit 1
+
+      # Ptyxis-focused suites. The filters match the fork's test names;
+      # this keeps CI fast while still compiling the entire app (any
+      # compile break in the fork fails here). gtk4-layer-shell is
+      # vendored because Ubuntu 24.04 has no package for it.
+      - name: Run preference UI unit + integration tests
+        run: |
+          zig build test -fno-sys=gtk4-layer-shell -Dtest-filter=config_bridge
+          zig build test -fno-sys=gtk4-layer-shell -Dtest-filter=profile_store
+          zig build test -fno-sys=gtk4-layer-shell -Dtest-filter=preferences_logic
+
+      - name: Build app
+        run: zig build -fno-sys=gtk4-layer-shell
+
+      - name: Headless UI smoke test
+        run: bash test/ui/smoke.sh zig-out/bin/ghostty
+
+      - name: Screenshot walkthrough
+        run: |
+          sudo apt-get install -y imagemagick xdotool
+          bash test/ui/walkthrough.sh zig-out/bin/ghostty walkthrough
+
+      - name: Upload walkthrough screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-walkthrough
+          path: walkthrough/
+          if-no-files-found: warn
+          retention-days: 14

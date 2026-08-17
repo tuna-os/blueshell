@@ -1,16 +1,16 @@
 [Desktop Entry]
 Version=1.0
-Name=GhosttyPtyxis
+Name=BlueShell
 GenericName=Terminal
 Comment=Container-native terminal powered by Ghostty
 Type=Application
 TryExec=ghostty
 Exec=ghostty --gtk-single-instance=false
-Icon=dev.hanthor.GhosttyPtyxis
+Icon=dev.hanthor.BlueShell
 Categories=System;TerminalEmulator;
 Keywords=terminal;tty;pty;container;toolbox;distrobox;podman;
 StartupNotify=true
-StartupWMClass=dev.hanthor.GhosttyPtyxis
+StartupWMClass=dev.hanthor.BlueShell
 Terminal=false
 Actions=new-window;
 X-GNOME-UsesNotifications=true

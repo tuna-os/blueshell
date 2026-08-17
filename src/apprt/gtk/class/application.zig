@@ -1379,10 +1379,18 @@ pub const Application = extern struct {
         // non-fatal — Host-only tabs still work without it.
         self.startupContainerClient();
 
-        // Optional: auto-open Preferences window for smoke testing
-        // (gated on env var, off by default).
-        if (std.posix.getenv("GHOSTTY_PTYXIS_TEST_PREFS")) |_| {
+        // Optional: auto-open Preferences window for smoke testing and
+        // screenshot walkthroughs (gated on env var, off by default).
+        // A value naming a page ("appearance", "behavior", "shortcuts",
+        // "profiles") opens that page; any other value opens the default.
+        if (std.posix.getenv("GHOSTTY_PTYXIS_TEST_PREFS")) |page| {
             const window = PreferencesWindow.new();
+            for ([_][:0]const u8{ "appearance", "behavior", "shortcuts", "profiles" }) |known| {
+                if (std.mem.eql(u8, page, known)) {
+                    window.as(adw.PreferencesWindow).setVisiblePageName(known.ptr);
+                    break;
+                }
+            }
             window.as(gtk.Window).present();
         }
 
