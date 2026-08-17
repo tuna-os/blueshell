@@ -36,20 +36,21 @@ TunaOS convention is `org.tunaos.<App>`. One PR, mechanical:
 | File | Change |
 | --- | --- |
 | `flatpak/dev.hanthor.BlueShell.yml` | rename file, `app-id:` field |
-| `flatpak/dev.hanthor.BlueShell.desktop` | rename file; `Icon=` stays `org.tunaos.BlueShell` after rename-icon |
+| `flatpak/dev.hanthor.BlueShell.desktop` | rename file; update `Icon=` and `StartupWMClass=` |
+| `flatpak/dev.hanthor.BlueShell.svg` | rename file (manifest install path follows app ID) |
 | `.github/workflows/ghostty-ptyxis.yml` | `manifest-path`, bundle name |
 | `.github/workflows/publish-flatpak.yml` | `APP_ID` env at the top |
 | `README.md`, `HACKING.md` | install commands, App ID mention |
 
 Notes:
 
-- **Icon (required before public distribution):** the manifest's
-  `rename-icon: com.mitchellh.ghostty` currently ships *Ghostty's* icon
-  under our app ID. Ghostty's icons are copyrighted and licensed to the
-  Ghostty project only — BlueShell needs its own icon (a blue shell —
-  scallop or spiral — reads well at 16px) installed as
-  `org.tunaos.BlueShell.svg/png`, with `rename-icon` dropped. Same for
-  `rename-appdata-file`: replace with a BlueShell metainfo file.
+- **Icon: done.** `flatpak/dev.hanthor.BlueShell.svg` is original
+  BlueShell artwork (blue scallop + terminal prompt), installed by the
+  manifest under the app ID; `rename-icon` was dropped so Ghostty's
+  unlicensed icon is no longer shipped. Rename the SVG alongside the
+  app-id flip. `rename-appdata-file` still reuses upstream's metainfo —
+  replace with a BlueShell metainfo file before Flathub-style listing
+  polish matters.
 - Keep `--own-name=com.mitchellh.ghostty` in `finish-args` for now: the
   GTK application still registers on D-Bus under upstream's id
   (invisible plumbing, not user-facing branding), and the
@@ -73,11 +74,14 @@ Per `tuna-os/flatpak-index` ("adding apps" flow):
    the manifest at repo root, add a thin root-level manifest that
    `base`s or mirrors `flatpak/org.tunaos.BlueShell.yml` rather
    than duplicating it.
-3. CI workflow `publish-flatpak.yml` — already committed here. On push
-   to `ptyxis-port` it: builds the flatpak in the GNOME 50 container →
-   exports an OCI image → pushes `ghcr.io/tuna-os/blueshell` →
-   calls the index-update hook in `tuna-os/docs` with
-   `FLATPAK_INDEX_TOKEN`.
+3. CI workflow `publish-flatpak.yml` — already committed here, copied
+   from `tuna-os/finupdate` (the canonical tuna-os pipeline): native
+   x86_64 + aarch64 OCI builds in the GNOME 50 container → skopeo push
+   to `ghcr.io/tuna-os/blueshell:latest-<arch>` → vendored
+   `.github/scripts/update-index.py` updates
+   `tuna-os/docs:static/flatpak/index/static` and pushes with
+   `FLATPAK_INDEX_TOKEN`. Tags `v*` also attach .flatpak bundles to the
+   GitHub release.
 4. Set the secret (step 1) and push; Cloudflare Pages redeploys the
    index and the app appears in the remote.
 
@@ -92,9 +96,13 @@ flatpak install tuna-os org.tunaos.BlueShell
 
 Being installable is not the finish line — the app must be discoverable:
 
-1. **tunaos.org listing**: the site is served from `tuna-os/docs`
-   (Cloudflare Pages). Open a PR there adding BlueShell to the apps
-   section, alongside the flatpak-index entry. Ready-to-paste blurb:
+1. **tunaos.org listing**: the site is a Docusaurus build from
+   `tuna-os/docs` with one `docs/<app>/index.md` page per app. A
+   ready-to-copy BlueShell page in the finupdate page's format lives at
+   [`docs/site/blueshell/index.md`](site/blueshell/index.md) in this
+   repo — PR it to `tuna-os/docs:docs/blueshell/index.md` (add a
+   `sidebars.ts` entry if pages aren't auto-discovered). Short blurb if
+   an apps-overview list also needs a row:
 
    > **BlueShell** — container-native terminal for GNOME. Ptyxis's
    > container-first UX (Toolbox / Distrobox / Podman tabs, profiles,

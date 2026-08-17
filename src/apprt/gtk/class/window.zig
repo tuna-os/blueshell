@@ -27,6 +27,9 @@ const CloseConfirmationDialog = @import("close_confirmation_dialog.zig").CloseCo
 const SplitTree = @import("split_tree.zig").SplitTree;
 const Surface = @import("surface.zig").Surface;
 const Tab = @import("tab.zig").Tab;
+const palette_mod = @import("palette.zig");
+const osc_palette = @import("osc_palette.zig");
+const preferences_window = @import("preferences_window.zig");
 const DebugWarning = @import("debug_warning.zig").DebugWarning;
 const CommandPalette = @import("command_palette.zig").CommandPalette;
 const WeakRef = @import("../weak_ref.zig").WeakRef;
@@ -259,6 +262,7 @@ pub const Window = extern struct {
         /// Tab page that the context menu was opened for.
         /// setup by `setup-menu`.
         context_menu_page: ?*adw.TabPage = null,
+        tab_context_menu: *gio.Menu,
 
         // Template bindings
         tab_overview: *adw.TabOverview,
@@ -337,6 +341,11 @@ pub const Window = extern struct {
 
         // Initialize our actions
         self.initActionMap();
+
+        // Per-tab palette section of the tab context menu (issue #9):
+        // featured palettes + reset, applied via OSC injection to the
+        // tab's active surface only.
+        self.initTabPaletteMenu();
 
         // Start states based on config.
         if (config.maximize) self.as(gtk.Window).maximize();
@@ -534,12 +543,9 @@ pub const Window = extern struct {
         setThemeCheckButtons(self, follow_btn, light_btn, dark_btn);
 
         // Wire theme toggle signals (after initial state is set).
-        _ = gobject.signalConnectData(follow_btn.as(gobject.Object), "toggled",
-            @ptrCast(&themeFollowToggled), self, null, .{});
-        _ = gobject.signalConnectData(light_btn.as(gobject.Object), "toggled",
-            @ptrCast(&themeLightToggled), self, null, .{});
-        _ = gobject.signalConnectData(dark_btn.as(gobject.Object), "toggled",
-            @ptrCast(&themeDarkToggled), self, null, .{});
+        _ = gobject.signalConnectData(follow_btn.as(gobject.Object), "toggled", @ptrCast(&themeFollowToggled), self, null, .{});
+        _ = gobject.signalConnectData(light_btn.as(gobject.Object), "toggled", @ptrCast(&themeLightToggled), self, null, .{});
+        _ = gobject.signalConnectData(dark_btn.as(gobject.Object), "toggled", @ptrCast(&themeDarkToggled), self, null, .{});
 
         _ = popover.addChild(sel_box.as(gtk.Widget), "theme-buttons");
 
@@ -634,6 +640,8 @@ pub const Window = extern struct {
             .init("prompt-surface-title", actionPromptSurfaceTitle, null),
             .init("prompt-tab-title", actionPromptTabTitle, null),
             .init("prompt-context-tab-title", actionPromptContextTabTitle, null),
+            .init("context-tab-palette", actionContextTabPalette, s_variant_type),
+            .init("context-tab-palette-reset", actionContextTabPaletteReset, null),
             .init("ring-bell", actionRingBell, null),
             .init("split-right", actionSplitRight, null),
             .init("split-left", actionSplitLeft, null),
@@ -2308,9 +2316,8 @@ pub const Window = extern struct {
             if (icon) |i| {
                 // The Ptyxis-shipped symbolic names (container-toolbox-
                 // symbolic, container-podman-symbolic, …) aren't in the
-                // adwaita icon theme, so they render as a generic
-                // missing-icon placeholder. Map them to icons that do
-                // exist in standard themes until we ship our own.
+                // Ptyxis's container icons ship in our gresource; only
+                // distrobox needs remapping to the generic icon.
                 const remapped = remapContainerIcon(i);
                 const themed = gio.ThemedIcon.new(remapped.ptr);
                 defer _ = gobject.Object.unref(themed.as(gobject.Object));
@@ -2320,12 +2327,11 @@ pub const Window = extern struct {
     }
 
     fn remapContainerIcon(name: [:0]const u8) [:0]const u8 {
+        // The Ptyxis container-*-symbolic icons ship in our gresource
+        // (src/apprt/gtk/icons), so they resolve directly. Ptyxis has no
+        // distrobox icon — that one falls back to the generic container.
         const map = [_]struct { from: []const u8, to: [:0]const u8 }{
-            .{ .from = "container-toolbox-symbolic", .to = "applications-system-symbolic" },
-            .{ .from = "container-podman-symbolic", .to = "package-x-generic-symbolic" },
-            .{ .from = "container-distrobox-symbolic", .to = "applications-engineering-symbolic" },
-            .{ .from = "container-jhbuild-symbolic", .to = "applications-development-symbolic" },
-            .{ .from = "container-generic-symbolic", .to = "applications-system-symbolic" },
+            .{ .from = "container-distrobox-symbolic", .to = "container-generic-symbolic" },
         };
         for (map) |entry| {
             if (std.mem.eql(u8, name, entry.from)) return entry.to;
@@ -2519,6 +2525,83 @@ pub const Window = extern struct {
         const child = page.getChild();
         const tab = gobject.ext.cast(Tab, child) orelse return;
         tab.promptTabTitle();
+    }
+
+    fn initTabPaletteMenu(self: *Self) void {
+        const priv = self.private();
+        const palette_alloc = std.heap.c_allocator;
+
+        const palettes = palette_mod.loadAll(palette_alloc) catch |err| {
+            log.warn("palette load for tab menu failed: {s}", .{@errorName(err)});
+            return;
+        };
+        defer palette_alloc.free(palettes);
+
+        const submenu = gio.Menu.new();
+        defer _ = gobject.Object.unref(submenu.as(gobject.Object));
+
+        for (preferences_window.PreferencesWindow.featured_palette_ids) |fid| {
+            const p: *const palette_mod.Palette = blk: {
+                for (palettes) |*candidate| {
+                    if (std.ascii.eqlIgnoreCase(candidate.id, fid)) break :blk candidate;
+                }
+                continue;
+            };
+            const name_z = palette_alloc.dupeZ(u8, p.name) catch continue;
+            defer palette_alloc.free(name_z);
+            const id_z = palette_alloc.dupeZ(u8, p.id) catch continue;
+            defer palette_alloc.free(id_z);
+
+            const item = gio.MenuItem.new(name_z.ptr, null);
+            item.setActionAndTargetValue(
+                "win.context-tab-palette",
+                glib.Variant.newString(id_z.ptr),
+            );
+            submenu.appendItem(item);
+            _ = gobject.Object.unref(item.as(gobject.Object));
+        }
+
+        submenu.append(i18n._("Reset Palette"), "win.context-tab-palette-reset");
+
+        const section = gio.Menu.new();
+        defer _ = gobject.Object.unref(section.as(gobject.Object));
+        section.appendSubmenu(i18n._("Apply Palette"), submenu.as(gio.MenuModel));
+        priv.tab_context_menu.appendSection(null, section.as(gio.MenuModel));
+    }
+
+    fn contextTabSurface(self: *Self) ?*CoreSurface {
+        const priv = self.private();
+        const page = priv.context_menu_page orelse return null;
+        const child = page.getChild();
+        const tab = gobject.ext.cast(Tab, child) orelse return null;
+        const surface = tab.getActiveSurface() orelse return null;
+        return surface.core();
+    }
+
+    fn actionContextTabPalette(
+        _: *gio.SimpleAction,
+        parameter: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const p = parameter orelse return;
+        var len: usize = 0;
+        const c_ptr = glib.Variant.getString(p, &len);
+        const id = c_ptr[0..len];
+        const core_surface = self.contextTabSurface() orelse return;
+        osc_palette.applyToSurface(core_surface, id) catch |err| {
+            log.warn("apply tab palette({s}) failed: {s}", .{ id, @errorName(err) });
+        };
+    }
+
+    fn actionContextTabPaletteReset(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const core_surface = self.contextTabSurface() orelse return;
+        osc_palette.resetSurface(core_surface) catch |err| {
+            log.warn("reset tab palette failed: {s}", .{@errorName(err)});
+        };
     }
 
     fn actionPromptSurfaceTitle(
@@ -2747,6 +2830,7 @@ pub const Window = extern struct {
             });
 
             // Bindings
+            class.bindTemplateChildPrivate("tab_context_menu", .{});
             class.bindTemplateChildPrivate("tab_overview", .{});
             class.bindTemplateChildPrivate("tab_bar", .{});
             class.bindTemplateChildPrivate("tab_view", .{});

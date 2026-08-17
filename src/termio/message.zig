@@ -82,6 +82,12 @@ pub const Message = union(enum) {
     /// Write where the data is allocated and must be freed.
     write_alloc: WriteReq.Alloc,
 
+    /// BlueShell: feed bytes through the terminal stream parser as if
+    /// they were read from the pty. Used for per-surface OSC injection
+    /// (e.g. per-tab palette overrides via OSC 4/10/11/12) — unlike the
+    /// write_* messages, the bytes never reach the child process.
+    inject_output: WriteReq.Alloc,
+
     /// Restart the subprocess in-place. Sent by the main thread when
     /// exit-action = restart after a child exits.
     restart_subprocess: void,

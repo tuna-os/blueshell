@@ -204,11 +204,34 @@ fn genIcons(writer: *std.Io.Writer) !void {
         }
     }
 
+    // Ptyxis container symbolic icons (GPL-3.0, from
+    // gitlab.gnome.org/chergert/ptyxis src/icons/scalable/actions).
+    // GTK registers "{resource base path}/icons" as an icon-theme
+    // resource path, so these resolve by name (e.g.
+    // "container-toolbox-symbolic") without touching the system theme.
+    inline for (container_icons) |name| {
+        const source = "src/apprt/gtk/icons/scalable/actions/" ++ name ++ ".svg";
+        try cwd.access(source, .{});
+        try writer.print(
+            \\    <file alias="scalable/actions/{s}.svg">{s}</file>
+            \\
+        ,
+            .{ name, source },
+        );
+    }
+
     try writer.writeAll(
         \\  </gresource>
         \\
     );
 }
+
+const container_icons = [_][]const u8{
+    "container-generic-symbolic",
+    "container-jhbuild-symbolic",
+    "container-podman-symbolic",
+    "container-toolbox-symbolic",
+};
 
 /// Generate the resources at the root prefix.
 fn genRoot(writer: *std.Io.Writer) !void {

@@ -34,6 +34,7 @@
 
 #include <gio/gio.h>
 
+#include "blueshell-vm-providers.h"
 #include "ptyxis-agent-impl.h"
 #include "ptyxis-distrobox-container.h"
 #include "ptyxis-podman-provider.h"
@@ -158,6 +159,17 @@ ptyxis_agent_init (PtyxisAgent  *agent,
     }
 
   ptyxis_agent_impl_add_provider (agent->impl, podman);
+
+  /* BlueShell: opt-in VM/cluster spawn targets (lima, libvirt, incus,
+   * kubernetes, kubevirt) via BLUESHELL_VM_PROVIDERS. */
+  {
+    g_autoptr(GPtrArray) vm_containers =
+      blueshell_vm_providers_enumerate (g_getenv ("BLUESHELL_VM_PROVIDERS"));
+
+    for (guint i = 0; i < vm_containers->len; i++)
+      ptyxis_agent_impl_add_container (agent->impl,
+                                       g_ptr_array_index (vm_containers, i));
+  }
 
   g_dbus_connection_start_message_processing (agent->bus);
 

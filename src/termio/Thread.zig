@@ -352,6 +352,14 @@ fn drainMailbox(
                 );
             },
 
+            // BlueShell: bytes injected into the terminal stream parser
+            // (never written to the child). processOutput takes the
+            // renderer lock itself.
+            .inject_output => |v| {
+                defer v.alloc.free(v.data);
+                io.processOutput(v.data);
+            },
+
             .restart_subprocess => try io.backend.exec.restartSubprocess(
                 data.alloc,
                 io,

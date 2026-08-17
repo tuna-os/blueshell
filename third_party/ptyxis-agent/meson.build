@@ -34,6 +34,7 @@ ptyxis_agent_ipc = gnome.gdbus_codegen('ptyxis-agent-ipc',
 ptyxis_agent_sources = [
   ptyxis_agent_ipc,
   files([
+    'blueshell-vm-providers.c',
     'ptyxis-agent-util.c',
     'ptyxis-container-provider.c',
     'ptyxis-distrobox-container.c',
@@ -60,3 +61,20 @@ executable('ptyxis-agent', ptyxis_agent_sources,
           install_dir: get_option('libexecdir'),
                c_args: ptyxis_agent_c_args,
 )
+
+# BlueShell: unit test for the VM providers' enumeration/parsing. Uses
+# fake CLI shims on PATH (see test-vm-providers.c), so it runs anywhere.
+test_vm_providers = executable('test-vm-providers',
+  [ptyxis_agent_ipc, files([
+    'blueshell-vm-providers.c',
+    'ptyxis-agent-util.c',
+    'ptyxis-container-provider.c',
+    'ptyxis-run-context.c',
+    'ptyxis-session-container.c',
+    'ptyxis-unix-fd-map.c',
+    'test-vm-providers.c',
+  ])],
+  dependencies: ptyxis_agent_deps,
+  c_args: ptyxis_agent_c_args,
+)
+test('vm-providers', test_vm_providers)

@@ -5,8 +5,9 @@ sdk: org.gnome.Sdk
 default-branch: master
 command: ghostty
 
-# Rename Ghostty's upstream assets to our app-id so the shell picks us up.
-rename-icon: com.mitchellh.ghostty
+# Rename Ghostty's upstream metainfo to our app-id. The icon is NOT
+# renamed from upstream: Ghostty's icon artwork is copyrighted and not
+# licensed to derivatives, so we install our own BlueShell icon below.
 rename-appdata-file: com.mitchellh.ghostty.metainfo.xml
 
 finish-args:
@@ -75,6 +76,12 @@ modules:
       # Install our custom desktop file (overrides the upstream one).
       - install -Dm644 flatpak/dev.hanthor.BlueShell.desktop
           /app/share/applications/dev.hanthor.BlueShell.desktop
+      # Install the BlueShell icon (original artwork; Ghostty's icon is
+      # unlicensed to us). Upstream's com.mitchellh.ghostty icons stay
+      # installed but are not exported (flatpak exports only app-id-named
+      # icons).
+      - install -Dm644 flatpak/dev.hanthor.BlueShell.svg
+          /app/share/icons/hicolor/scalable/apps/dev.hanthor.BlueShell.svg
     sources:
       - type: dir
         path: ..

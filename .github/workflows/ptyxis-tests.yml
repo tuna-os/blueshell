@@ -101,6 +101,12 @@ jobs:
           zig build test -fno-sys=gtk4-layer-shell -Dtest-filter=profile_store
           zig build test -fno-sys=gtk4-layer-shell -Dtest-filter=preferences_logic
 
+      - name: ptyxis-agent unit tests (VM providers)
+        run: |
+          sudo apt-get install -y libjson-glib-dev meson ninja-build
+          meson setup agent-build third_party/ptyxis-agent
+          meson test -C agent-build --print-errorlogs
+
       - name: Build app
         run: zig build -fno-sys=gtk4-layer-shell
 
