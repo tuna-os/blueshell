@@ -44,8 +44,11 @@ jobs:
           git clone --depth 1 -b v0.16.0 \
             https://gitlab.gnome.org/GNOME/blueprint-compiler.git "$HOME/blueprint-compiler"
           mkdir -p "$HOME/.local/bin"
+          # Running from a git checkout reports '--version: uninstalled',
+          # which Ghostty's semver check can't parse — answer it ourselves.
           cat > "$HOME/.local/bin/blueprint-compiler" <<EOF
           #!/bin/sh
+          if [ "\$1" = "--version" ]; then echo 0.16.0; exit 0; fi
           exec python3 "$HOME/blueprint-compiler/blueprint-compiler.py" "\$@"
           EOF
           chmod +x "$HOME/.local/bin/blueprint-compiler"
