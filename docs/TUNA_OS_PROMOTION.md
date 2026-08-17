@@ -78,11 +78,36 @@ flatpak remote-add --if-not-exists tuna-os https://tunaos.org/flatpak/tuna-os.fl
 flatpak install tuna-os org.tunaos.GhosttyPtyxis
 ```
 
-## 4. Post-promotion checklist
+## 4. tunaos.org site listing + install instructions
+
+Being installable is not the finish line — the app must be discoverable:
+
+1. **tunaos.org listing**: the site is served from `tuna-os/docs`
+   (Cloudflare Pages). Open a PR there adding GhosttyPtyxis to the apps
+   section, alongside the flatpak-index entry. Ready-to-paste blurb:
+
+   > **GhosttyPtyxis** — container-native terminal for GNOME. Ptyxis's
+   > container-first UX (Toolbox / Distrobox / Podman tabs, profiles,
+   > preferences) powered by the Ghostty rendering engine (GPU
+   > acceleration, Kitty graphics, ligatures, splits).
+   >
+   > `flatpak install tuna-os org.tunaos.GhosttyPtyxis`
+
+   Include a screenshot from the CI `ui-walkthrough` artifact
+   (`02-prefs-appearance.png` shows the app best) and a link back to
+   `tuna-os/ghostty-ptyxis`.
+
+2. **README install instructions**: the README's "TunaOS Flatpak
+   remote" section is already written (currently marked as pending
+   promotion) — remove the "available once…" note and promote it to
+   the recommended install path in the same PR that flips the app ID.
+
+## 5. Post-promotion checklist
 
 - [ ] `ptyxis-tests` and `ghostty-ptyxis` (bundle) workflows green in the org repo
 - [ ] `publish-flatpak` run pushed an image to `ghcr.io/tuna-os/ghostty-ptyxis` and the index PR/commit landed in `tuna-os/docs`
 - [ ] Fresh-machine install from the remote verified (`flatpak install tuna-os org.tunaos.GhosttyPtyxis`)
 - [ ] README install section switched to the remote as the primary path (nightly.link bundle stays as the "bleeding edge" alternative)
+- [ ] tunaos.org apps page lists GhosttyPtyxis with install command + screenshot (PR to `tuna-os/docs`)
 - [ ] `upstream-sync.yml` weekly run confirmed working under the org (issue/PR creation permissions)
 - [ ] Old repo redirect verified; announce the move in tunaOS channels

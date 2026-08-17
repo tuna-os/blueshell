@@ -73,6 +73,17 @@ jobs:
           path: ~/.cache/zig
           key: zig-pkg-${{ hashFiles('build.zig.zon') }}
 
+      # Dependency mirrors (gitlab.freedesktop.org especially) throw
+      # transient 5xx; retry the fetch before it can fail a test step.
+      - name: Fetch zig dependencies (with retry)
+        run: |
+          for i in 1 2 3 4; do
+            zig build --fetch -fno-sys=gtk4-layer-shell && exit 0
+            echo "fetch attempt $i failed; retrying in $((i*15))s"
+            sleep $((i*15))
+          done
+          exit 1
+
       # Ptyxis-focused suites. The filters match the fork's test names;
       # this keeps CI fast while still compiling the entire app (any
       # compile break in the fork fails here). gtk4-layer-shell is

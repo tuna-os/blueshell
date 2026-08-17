@@ -22,7 +22,20 @@ App ID: `dev.hanthor.GhosttyPtyxis`
 
 ## Installation
 
-### Flatpak — one-line install (recommended)
+### TunaOS Flatpak remote
+
+> Available once the [tuna-os promotion](docs/TUNA_OS_PROMOTION.md) lands;
+> until then use the nightly bundle below.
+
+```sh
+flatpak remote-add --if-not-exists tuna-os https://tunaos.org/flatpak/tuna-os.flatpakrepo
+flatpak install tuna-os org.tunaos.GhosttyPtyxis
+```
+
+Updates then arrive through normal `flatpak update`. The app is listed on
+[tunaos.org](https://tunaos.org/) alongside the other TunaOS apps.
+
+### Flatpak — one-line install (nightly bundle)
 
 CI builds a fresh Flatpak bundle on every commit to `ptyxis-port`. Install the latest:
 
