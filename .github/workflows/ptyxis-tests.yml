@@ -77,10 +77,12 @@ jobs:
       # transient 5xx; retry the fetch before it can fail a test step.
       - name: Fetch zig dependencies (with retry)
         run: |
-          for i in 1 2 3 4; do
-            zig build --fetch -fno-sys=gtk4-layer-shell && exit 0
-            echo "fetch attempt $i failed; retrying in $((i*15))s"
-            sleep $((i*15))
+          # NB: steps run under bash -e; keep the failing command inside
+          # an `if` so the loop actually retries.
+          for i in 1 2 3 4 5; do
+            if zig build --fetch -fno-sys=gtk4-layer-shell; then exit 0; fi
+            echo "fetch attempt $i failed; retrying in $((i*30))s"
+            sleep $((i*30))
           done
           exit 1
 
