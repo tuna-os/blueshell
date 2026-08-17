@@ -1,14 +1,14 @@
-# GhosttyPtyxis — Container-native terminal powered by Ghostty
+# BlueShell — Container-native terminal for GNOME
 
-**GhosttyPtyxis** is a container-oriented terminal emulator for GNOME, combining the Ptyxis user experience with the Ghostty rendering engine. It brings first-class container support (Toolbox, Distrobox, Podman) together with Ghostty's high-performance HarfBuzz text rendering, Kitty graphics protocol, OSC 8 hyperlinks, GPU acceleration, and splits — packaged in Ptyxis's polished GNOME interface.
+**BlueShell** is a container-oriented terminal emulator for GNOME, combining the Ptyxis-style user experience with the Ghostty rendering engine. It brings first-class container support (Toolbox, Distrobox, Podman) together with Ghostty's high-performance HarfBuzz text rendering, Kitty graphics protocol, OSC 8 hyperlinks, GPU acceleration, and splits — packaged in Ptyxis's polished GNOME interface.
 
-App ID: `dev.hanthor.GhosttyPtyxis`
+App ID: `dev.hanthor.BlueShell`
 
 ---
 
 ## What makes it different
 
-| | GhosttyPtyxis |
+| | BlueShell |
 | --- | --- |
 | **Renderer** | Ghostty — HarfBuzz, GPU-accelerated, Kitty graphics, OSC 8 hyperlinks, ligatures |
 | **Container integration** | First-class — spawn shells in Toolbox / Distrobox / Podman from the new-tab menu via `ptyxis-agent` |
@@ -29,7 +29,7 @@ App ID: `dev.hanthor.GhosttyPtyxis`
 
 ```sh
 flatpak remote-add --if-not-exists tuna-os https://tunaos.org/flatpak/tuna-os.flatpakrepo
-flatpak install tuna-os org.tunaos.GhosttyPtyxis
+flatpak install tuna-os org.tunaos.BlueShell
 ```
 
 Updates then arrive through normal `flatpak update`. The app is listed on
@@ -40,16 +40,16 @@ Updates then arrive through normal `flatpak update`. The app is listed on
 CI builds a fresh Flatpak bundle on every commit to `ptyxis-port`. Install the latest:
 
 ```sh
-curl -L https://nightly.link/hanthor/ghostty-ptyxis/workflows/ghostty-ptyxis/ptyxis-port/GhosttyPtyxis.flatpak.zip \
-  -o GhosttyPtyxis.flatpak.zip \
-  && unzip -o GhosttyPtyxis.flatpak.zip \
-  && flatpak install --user --reinstall GhosttyPtyxis.flatpak
+curl -L https://nightly.link/hanthor/ghostty-ptyxis/workflows/ghostty-ptyxis/ptyxis-port/BlueShell.flatpak.zip \
+  -o BlueShell.flatpak.zip \
+  && unzip -o BlueShell.flatpak.zip \
+  && flatpak install --user --reinstall BlueShell.flatpak
 ```
 
 ### Flatpak — build from source
 
 ```sh
-flatpak-builder --install --user build-dir flatpak/dev.hanthor.GhosttyPtyxis.yml
+flatpak-builder --install --user build-dir flatpak/dev.hanthor.BlueShell.yml
 ```
 
 ### Build from source
@@ -79,7 +79,7 @@ promotion + Flatpak remote plan.
 
 ## Container integration
 
-GhosttyPtyxis detects running Toolbox and Distrobox containers at startup and lists them in the new-tab menu. Selecting a container spawns a shell inside it via `ptyxis-agent`, which handles the D-Bus socket and PTY handoff.
+BlueShell detects running Toolbox and Distrobox containers at startup and lists them in the new-tab menu. Selecting a container spawns a shell inside it via `ptyxis-agent`, which handles the D-Bus socket and PTY handoff.
 
 Agent resolution order:
 
@@ -164,7 +164,7 @@ All keybindings are configurable via `keybind = trigger=action` in `~/.config/gh
 
 ## Configuration
 
-GhosttyPtyxis uses Ghostty's standard config format at `~/.config/ghostty/config`. All [Ghostty config options](https://ghostty.org/docs/config) are supported. Changes are applied live via Preferences or by editing the file and pressing `Ctrl+Shift+R`.
+BlueShell uses Ghostty's standard config format at `~/.config/ghostty/config`. All [Ghostty config options](https://ghostty.org/docs/config) are supported. Changes are applied live via Preferences or by editing the file and pressing `Ctrl+Shift+R`.
 
 ---
 
@@ -172,6 +172,6 @@ GhosttyPtyxis uses Ghostty's standard config format at `~/.config/ghostty/config
 
 - **[Ghostty](https://ghostty.org)** by Mitchell Hashimoto — terminal emulation engine, renderer, GTK apprt
 - **[Ptyxis](https://gitlab.gnome.org/chergert/ptyxis)** by Christian Hergert — UI design, container integration, palette collection, profile system design
-- **GhosttyPtyxis** ports Ptyxis's UI into Ghostty's GTK apprt as Zig
+- **BlueShell** ports Ptyxis's UI into Ghostty's GTK apprt as Zig
 
 License: GPL-3.0-or-later (matching both upstream projects)

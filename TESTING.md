@@ -1,4 +1,4 @@
-# Testing GhosttyPtyxis
+# Testing BlueShell
 
 This fork layers a Ptyxis-style UI (preferences window, profiles,
 palettes, container integration) on top of upstream Ghostty. Upstream's

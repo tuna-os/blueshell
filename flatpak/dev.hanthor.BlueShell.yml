@@ -1,4 +1,4 @@
-app-id: dev.hanthor.GhosttyPtyxis
+app-id: dev.hanthor.BlueShell
 runtime: org.gnome.Platform
 runtime-version: "50"
 sdk: org.gnome.Sdk
@@ -73,8 +73,8 @@ modules:
         --search-prefix /app
         --system $PWD/vendor/p
       # Install our custom desktop file (overrides the upstream one).
-      - install -Dm644 flatpak/dev.hanthor.GhosttyPtyxis.desktop
-          /app/share/applications/dev.hanthor.GhosttyPtyxis.desktop
+      - install -Dm644 flatpak/dev.hanthor.BlueShell.desktop
+          /app/share/applications/dev.hanthor.BlueShell.desktop
     sources:
       - type: dir
         path: ..

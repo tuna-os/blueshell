@@ -1,6 +1,6 @@
 name: publish-flatpak
 
-# Publishes GhosttyPtyxis to the TunaOS Flatpak remote
+# Publishes BlueShell to the TunaOS Flatpak remote
 # (https://tunaos.org/flatpak/): builds the flatpak, exports it as an
 # OCI image, pushes to ghcr.io/tuna-os, and pings the index in
 # tuna-os/docs so Cloudflare Pages redeploys the remote.
@@ -15,10 +15,10 @@ on:
   workflow_dispatch: {}
 
 env:
-  # Flip to org.tunaos.GhosttyPtyxis when the app-id rename lands
+  # Flip to org.tunaos.BlueShell when the app-id rename lands
   # (docs/TUNA_OS_PROMOTION.md step 2).
-  APP_ID: dev.hanthor.GhosttyPtyxis
-  IMAGE: ghcr.io/tuna-os/ghostty-ptyxis
+  APP_ID: dev.hanthor.BlueShell
+  IMAGE: ghcr.io/tuna-os/blueshell
 
 permissions:
   contents: read
@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   publish:
-    if: github.repository == 'tuna-os/ghostty-ptyxis'
+    if: github.repository == 'tuna-os/blueshell'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     container:

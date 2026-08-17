@@ -1,10 +1,10 @@
-# Developing GhosttyPtyxis
+# Developing BlueShell
 
-This document covers building and hacking on **GhosttyPtyxis** (the `ptyxis-port` branch). The second half of this file is the upstream Ghostty developer guide, which applies equally here for anything not covered in the GhosttyPtyxis section.
+This document covers building and hacking on **BlueShell** (the `ptyxis-port` branch). The second half of this file is the upstream Ghostty developer guide, which applies equally here for anything not covered in the BlueShell section.
 
 ## Quick start (Fedora / Silverblue)
 
-GhosttyPtyxis builds inside a Fedora 43 toolbox. The host needs Zig 0.15.x on PATH.
+BlueShell builds inside a Fedora 43 toolbox. The host needs Zig 0.15.x on PATH.
 
 ```sh
 # One-time: create the build toolbox
@@ -67,7 +67,7 @@ The GTK app auto-resolves it from `PTYXIS_AGENT`, `/app/libexec/ptyxis-agent`, o
 ## Flatpak build
 
 ```sh
-flatpak-builder --install --user build-dir flatpak/dev.hanthor.GhosttyPtyxis.yml
+flatpak-builder --install --user build-dir flatpak/dev.hanthor.BlueShell.yml
 ```
 
 The manifest bundles ptyxis-agent at `/app/libexec/ptyxis-agent`.

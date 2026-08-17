@@ -1,6 +1,6 @@
 # Staying in sync with upstream Ghostty
 
-GhosttyPtyxis is a patch-set on top of `ghostty-org/ghostty`. The whole
+BlueShell is a patch-set on top of `ghostty-org/ghostty`. The whole
 strategy is built around one goal: **keep the downstream diff small,
 mechanical to re-apply, and loudly alarmed** so weekly rebases stay a
 15-minute chore instead of a rescue mission.
