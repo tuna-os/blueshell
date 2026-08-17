@@ -1,7 +1,7 @@
 # Promoting BlueShell to the tuna-os org + Flatpak remote
 
-Goal: move `hanthor/ghostty-ptyxis` → `tuna-os/blueshell` and ship
-it through the TunaOS Flatpak remote (`https://tunaos.org/flatpak/`,
+Goal: ship BlueShell (now at `tuna-os/blueshell` — **transfer done
+2026-08-17**) through the TunaOS Flatpak remote (`https://tunaos.org/flatpak/`,
 OCI images on `ghcr.io/tuna-os/*`, index maintained in `tuna-os/docs`
 and served via Cloudflare Pages).
 
@@ -11,7 +11,7 @@ Repo-side groundwork in this tree is done:
 transfer — nothing here blocks on the org. The remaining steps need
 org permissions and are listed in order.
 
-## 1. Transfer the repository
+## 1. Transfer the repository — ✅ DONE (2026-08-17)
 
 GitHub → repo **Settings → General → Danger Zone → Transfer ownership**
 → `tuna-os`. (Org owner must accept; hanthor needs create-repo rights

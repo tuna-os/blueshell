@@ -40,7 +40,7 @@ Updates then arrive through normal `flatpak update`. The app is listed on
 CI builds a fresh Flatpak bundle on every commit to `ptyxis-port`. Install the latest:
 
 ```sh
-curl -L https://nightly.link/hanthor/ghostty-ptyxis/workflows/ghostty-ptyxis/ptyxis-port/BlueShell.flatpak.zip \
+curl -L https://nightly.link/tuna-os/blueshell/workflows/ghostty-ptyxis/ptyxis-port/BlueShell.flatpak.zip \
   -o BlueShell.flatpak.zip \
   && unzip -o BlueShell.flatpak.zip \
   && flatpak install --user --reinstall BlueShell.flatpak
@@ -62,8 +62,8 @@ sudo dnf install blueprint-compiler gtk4-layer-shell-devel libadwaita-devel meso
 
 # Download Zig 0.15.x from https://ziglang.org/download/ and put on PATH
 
-git clone <this-repo> ghostty-ptyxis
-cd ghostty-ptyxis
+git clone https://github.com/tuna-os/blueshell
+cd blueshell
 zig build -Dapp-runtime=gtk -Doptimize=ReleaseFast
 # Binary at zig-out/bin/ghostty
 ```
