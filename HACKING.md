@@ -67,7 +67,7 @@ The GTK app auto-resolves it from `PTYXIS_AGENT`, `/app/libexec/ptyxis-agent`, o
 ## Flatpak build
 
 ```sh
-flatpak-builder --install --user build-dir flatpak/dev.hanthor.BlueShell.yml
+flatpak-builder --install --user build-dir flatpak/org.tunaos.BlueShell.yml
 ```
 
 The manifest bundles ptyxis-agent at `/app/libexec/ptyxis-agent`.
