@@ -96,9 +96,13 @@ flatpak install tuna-os org.tunaos.BlueShell
 
 Being installable is not the finish line — the app must be discoverable:
 
-1. **tunaos.org listing**: the site is served from `tuna-os/docs`
-   (Cloudflare Pages). Open a PR there adding BlueShell to the apps
-   section, alongside the flatpak-index entry. Ready-to-paste blurb:
+1. **tunaos.org listing**: the site is a Docusaurus build from
+   `tuna-os/docs` with one `docs/<app>/index.md` page per app. A
+   ready-to-copy BlueShell page in the finupdate page's format lives at
+   [`docs/site/blueshell/index.md`](site/blueshell/index.md) in this
+   repo — PR it to `tuna-os/docs:docs/blueshell/index.md` (add a
+   `sidebars.ts` entry if pages aren't auto-discovered). Short blurb if
+   an apps-overview list also needs a row:
 
    > **BlueShell** — container-native terminal for GNOME. Ptyxis's
    > container-first UX (Toolbox / Distrobox / Podman tabs, profiles,
