@@ -172,6 +172,25 @@ and finds the corresponding `ui/1.5/preferences-window.blp`.
 
 ---
 
+## `src/termio/message.zig` + `src/termio/Thread.zig` — LOW risk
+
+**What we added:** an `inject_output: WriteReq.Alloc` message variant
+(message.zig) and its handler in the Thread message switch
+(Thread.zig): free the buffer, call `io.processOutput(v.data)`. Used by
+the per-tab palette OSC injection (`osc_palette.zig`).
+
+**Why it can break:** upstream reshapes the Message union or the
+Thread dispatch switch.
+
+**Resolution recipe:** re-add the variant next to the `write_*`
+members and the handler case next to `.write_alloc`; the handler body
+is three lines and only depends on `processOutput` staying public.
+
+**Upstreaming:** could ride along with issue #6's discussion — a
+parser-injection message is broadly useful for embedders.
+
+---
+
 ## `.gitignore` — LOW risk
 
 **What we added:** `zig-pkg/` to keep the vendored package cache out

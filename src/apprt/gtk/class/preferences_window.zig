@@ -1317,7 +1317,7 @@ pub const PreferencesWindow = extern struct {
     }
 
     /// IDs of the 11 curated palettes shown on the front page, matching Ptyxis.
-    const featured_palette_ids = [_][]const u8{
+    pub const featured_palette_ids = [_][]const u8{
         "campbell",
         "dracula",
         "gnome",
