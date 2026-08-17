@@ -60,8 +60,15 @@ shoot() { # name window-title-pattern [env for the app run]
     fi
     import -display "$DISPLAY_NUM" -window root "$OUT/$name.png" \
         || fail "$name: capture failed"
+    # Kill the whole session: killing dbus-run-session alone orphans the
+    # app, whose window would then sit on top of the next capture.
+    pkill -TERM -f "$BIN --gtk-single-instance=false" 2>/dev/null
     kill "$app" 2>/dev/null
-    for _ in $(seq 1 10); do kill -0 "$app" 2>/dev/null || break; sleep 1; done
+    for _ in $(seq 1 10); do
+        pgrep -f "$BIN --gtk-single-instance=false" >/dev/null || break
+        sleep 1
+    done
+    pkill -KILL -f "$BIN --gtk-single-instance=false" 2>/dev/null
     kill -9 "$app" 2>/dev/null || true
     echo "captured $OUT/$name.png"
 }
