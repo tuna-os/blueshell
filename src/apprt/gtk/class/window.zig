@@ -534,12 +534,9 @@ pub const Window = extern struct {
         setThemeCheckButtons(self, follow_btn, light_btn, dark_btn);
 
         // Wire theme toggle signals (after initial state is set).
-        _ = gobject.signalConnectData(follow_btn.as(gobject.Object), "toggled",
-            @ptrCast(&themeFollowToggled), self, null, .{});
-        _ = gobject.signalConnectData(light_btn.as(gobject.Object), "toggled",
-            @ptrCast(&themeLightToggled), self, null, .{});
-        _ = gobject.signalConnectData(dark_btn.as(gobject.Object), "toggled",
-            @ptrCast(&themeDarkToggled), self, null, .{});
+        _ = gobject.signalConnectData(follow_btn.as(gobject.Object), "toggled", @ptrCast(&themeFollowToggled), self, null, .{});
+        _ = gobject.signalConnectData(light_btn.as(gobject.Object), "toggled", @ptrCast(&themeLightToggled), self, null, .{});
+        _ = gobject.signalConnectData(dark_btn.as(gobject.Object), "toggled", @ptrCast(&themeDarkToggled), self, null, .{});
 
         _ = popover.addChild(sel_box.as(gtk.Widget), "theme-buttons");
 
@@ -2308,9 +2305,8 @@ pub const Window = extern struct {
             if (icon) |i| {
                 // The Ptyxis-shipped symbolic names (container-toolbox-
                 // symbolic, container-podman-symbolic, …) aren't in the
-                // adwaita icon theme, so they render as a generic
-                // missing-icon placeholder. Map them to icons that do
-                // exist in standard themes until we ship our own.
+                // Ptyxis's container icons ship in our gresource; only
+                // distrobox needs remapping to the generic icon.
                 const remapped = remapContainerIcon(i);
                 const themed = gio.ThemedIcon.new(remapped.ptr);
                 defer _ = gobject.Object.unref(themed.as(gobject.Object));
@@ -2320,12 +2316,11 @@ pub const Window = extern struct {
     }
 
     fn remapContainerIcon(name: [:0]const u8) [:0]const u8 {
+        // The Ptyxis container-*-symbolic icons ship in our gresource
+        // (src/apprt/gtk/icons), so they resolve directly. Ptyxis has no
+        // distrobox icon — that one falls back to the generic container.
         const map = [_]struct { from: []const u8, to: [:0]const u8 }{
-            .{ .from = "container-toolbox-symbolic", .to = "applications-system-symbolic" },
-            .{ .from = "container-podman-symbolic", .to = "package-x-generic-symbolic" },
-            .{ .from = "container-distrobox-symbolic", .to = "applications-engineering-symbolic" },
-            .{ .from = "container-jhbuild-symbolic", .to = "applications-development-symbolic" },
-            .{ .from = "container-generic-symbolic", .to = "applications-system-symbolic" },
+            .{ .from = "container-distrobox-symbolic", .to = "container-generic-symbolic" },
         };
         for (map) |entry| {
             if (std.mem.eql(u8, name, entry.from)) return entry.to;
