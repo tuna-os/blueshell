@@ -9,9 +9,13 @@ name: Publish Flatpak
 # decisions: each arch builds natively on its own runner (no QEMU), and
 # skopeo gets a writable auth file.
 #
-# The whole workflow gates on the repo living in the tuna-os org, so it is
-# inert until the transfer (docs/TUNA_OS_PROMOTION.md); it then needs the
-# FLATPAK_INDEX_TOKEN secret (PAT with push access to tuna-os/docs).
+# Push-triggered publishes gate on the repo living in the tuna-os org;
+# manual dispatch also works pre-transfer from the fork: the image then
+# goes to the fork owner's ghcr namespace, and the tuna-os/docs index
+# update runs when the FLATPAK_INDEX_TOKEN secret (PAT with push access
+# to tuna-os/docs) is set — otherwise the run uploads a ready-to-merge
+# index snippet artifact instead. Note: pre-rename builds carry the
+# dev.hanthor.BlueShell app id, so that's the install name they publish.
 
 on:
   push:
@@ -27,11 +31,17 @@ env:
   # Flip both to the org.tunaos id at promotion step 2.
   APP_ID: dev.hanthor.BlueShell
   MANIFEST: flatpak/dev.hanthor.BlueShell.yml
+  # ghcr.io/<owner>/blueshell — tuna-os after the transfer, the fork
+  # owner before it (GITHUB_TOKEN can only write its own namespace).
+  IMAGE: ghcr.io/${{ github.repository_owner }}/blueshell
 
 jobs:
   build-oci:
     name: Build OCI — ${{ matrix.arch }}
-    if: github.repository == 'tuna-os/blueshell'
+    # Push-triggered publishes only from the tuna-os org repo; manual
+    # dispatch works from anywhere (pre-transfer publishing pushes the
+    # image to the dispatching owner's ghcr namespace instead).
+    if: github.repository == 'tuna-os/blueshell' || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false
@@ -100,14 +110,37 @@ jobs:
           echo "${{ env.GITHUB_TOKEN }}" \
             | skopeo login ghcr.io -u "${{ github.actor }}" --password-stdin
           skopeo copy oci:blueshell-x86_64.oci \
-            docker://ghcr.io/tuna-os/blueshell:latest-x86_64
+            "docker://${IMAGE}:latest-x86_64"
           skopeo copy oci:blueshell-aarch64.oci \
-            docker://ghcr.io/tuna-os/blueshell:latest-aarch64
+            "docker://${IMAGE}:latest-aarch64"
+
+      - name: Generate index snippet (always)
+        run: |
+          for arch in x86_64 aarch64; do
+            python3 .github/scripts/update-index.py \
+              --oci-dir "blueshell-${arch}.oci" \
+              --index-file blueshell-index-snippet.json \
+              --repo-name "${{ github.repository_owner }}/blueshell" \
+              --tags latest
+          done
+          cat blueshell-index-snippet.json
+
+      - name: Upload index snippet
+        uses: actions/upload-artifact@v7
+        with:
+          name: blueshell-index-snippet
+          path: blueshell-index-snippet.json
+          retention-days: 30
 
       - name: Update central index (tuna-os/docs)
         env:
           FLATPAK_INDEX_TOKEN: ${{ secrets.FLATPAK_INDEX_TOKEN }}
         run: |
+          if [ -z "$FLATPAK_INDEX_TOKEN" ]; then
+            echo "::notice::FLATPAK_INDEX_TOKEN not set — skipping tuna-os/docs index update."
+            echo "::notice::To publish into the remote: add a PAT with push access to tuna-os/docs as FLATPAK_INDEX_TOKEN and re-run, or merge the blueshell-index-snippet artifact's Results entry into tuna-os/docs:static/flatpak/index/static manually."
+            exit 0
+          fi
           git clone --depth 1 \
             https://github.com/tuna-os/docs.git \
             index-repo
@@ -118,7 +151,7 @@ jobs:
             python3 .github/scripts/update-index.py \
               --oci-dir "blueshell-${arch}.oci" \
               --index-file index-repo/static/flatpak/index/static \
-              --repo-name tuna-os/blueshell \
+              --repo-name "${{ github.repository_owner }}/blueshell" \
               --tags latest
           done
           cd index-repo
