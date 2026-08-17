@@ -83,7 +83,9 @@ jobs:
           # NB: steps run under bash -e; keep the failing command inside
           # an `if` so the loop actually retries.
           for i in 1 2 3 4 5; do
-            if zig build --fetch -fno-sys=gtk4-layer-shell; then exit 0; fi
+            # =all: plain --fetch skips lazy deps (wayland-protocols is
+            # lazy), which then get fetched — and can 504 — mid-test-step.
+            if zig build --fetch=all -fno-sys=gtk4-layer-shell; then exit 0; fi
             echo "fetch attempt $i failed; retrying in $((i*30))s"
             sleep $((i*30))
           done
