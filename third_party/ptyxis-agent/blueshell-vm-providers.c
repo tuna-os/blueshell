@@ -10,6 +10,8 @@
  *   kubernetes  kubectl exec -i -t POD [-c CONTAINER] -- <shell…>
  *   libvirt     sh -c 'exec virsh console "$0"' NAME   (console targets
  *   kubevirt    sh -c 'exec virtctl console -n "$0" "$1"' NS NAME
+ *   corral      sh -c 'exec corral ssh "$0"' NAME  (VMs)
+ *               sh -c 'exec corral ct console "$0"' NAME  (containers)
  *               take no command; the sh -c trick swallows the appended
  *               shell argv as unused positional parameters)
  *
@@ -369,6 +371,75 @@ blueshell_vm_providers_add_kubevirt (GPtrArray *containers)
     }
 }
 
+/* ---- Corral (tuna-os VM/CT manager): `corral list` + `corral ct list`.
+ * No machine-readable list output yet upstream, so parse the table
+ * tolerantly: skip the header row, first column is the name, and the
+ * row must contain "running" (any case). VMs attach via `corral ssh`,
+ * containers via `corral ct console` — both are console-style, so the
+ * sh -c "$0" trick swallows the appended shell argv. ---- */
+
+static void
+add_corral_rows (GPtrArray  *containers,
+                 const char *output,
+                 gboolean    is_ct)
+{
+  g_auto(GStrv) lines = NULL;
+
+  if (output == NULL)
+    return;
+
+  lines = g_strsplit (output, "\n", -1);
+
+  for (guint i = 0; lines[i] != NULL; i++)
+    {
+      g_auto(GStrv) cols = NULL;
+      g_autofree char *lower = NULL;
+      const char *name;
+
+      g_strstrip (lines[i]);
+      if (lines[i][0] == '\0')
+        continue;
+
+      lower = g_ascii_strdown (lines[i], -1);
+      if (i == 0 && g_str_has_prefix (lower, "name"))
+        continue; /* header row */
+      if (strstr (lower, "running") == NULL)
+        continue;
+
+      cols = g_strsplit_set (lines[i], " \t", -1);
+      name = cols[0];
+      if (name == NULL || name[0] == '\0')
+        continue;
+
+      {
+        g_autofree char *id = g_strdup_printf ("corral-%s%s", is_ct ? "ct-" : "", name);
+
+        if (is_ct)
+          g_ptr_array_add (containers,
+                           make_container (id, "corral", name, "container-generic-symbolic",
+                                           (const char * const []) {
+                                             "sh", "-c", "exec corral ct console \"$0\"", name, NULL
+                                           }));
+        else
+          g_ptr_array_add (containers,
+                           make_container (id, "corral", name, "computer-symbolic",
+                                           (const char * const []) {
+                                             "sh", "-c", "exec corral ssh \"$0\"", name, NULL
+                                           }));
+      }
+    }
+}
+
+void
+blueshell_vm_providers_add_corral (GPtrArray *containers)
+{
+  g_autofree char *vms = run_host_capture ((const char * const []) { "corral", "list", NULL });
+  g_autofree char *cts = run_host_capture ((const char * const []) { "corral", "ct", "list", NULL });
+
+  add_corral_rows (containers, vms, FALSE);
+  add_corral_rows (containers, cts, TRUE);
+}
+
 /* ---- Entry point ---- */
 
 typedef struct
@@ -384,6 +455,7 @@ static const VmProvider vm_providers[] = {
   { "incus", "incus", blueshell_vm_providers_add_incus },
   { "kubernetes", "kubectl", blueshell_vm_providers_add_kubernetes },
   { "kubevirt", "virtctl", blueshell_vm_providers_add_kubevirt },
+  { "corral", "corral", blueshell_vm_providers_add_corral },
 };
 
 gboolean

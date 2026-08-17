@@ -29,5 +29,6 @@ void blueshell_vm_providers_add_libvirt    (GPtrArray *containers);
 void blueshell_vm_providers_add_incus      (GPtrArray *containers);
 void blueshell_vm_providers_add_kubernetes (GPtrArray *containers);
 void blueshell_vm_providers_add_kubevirt   (GPtrArray *containers);
+void blueshell_vm_providers_add_corral     (GPtrArray *containers);
 
 G_END_DECLS

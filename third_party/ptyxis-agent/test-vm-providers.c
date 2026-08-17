@@ -180,6 +180,32 @@ test_kubevirt (void)
 }
 
 static void
+test_corral (void)
+{
+  g_autoptr(GPtrArray) containers = g_ptr_array_new_with_free_func (g_object_unref);
+  PtyxisIpcContainer *c;
+
+  write_shim ("corral",
+              "#!/bin/sh\n"
+              "case \"$1 $2\" in\n"
+              "'ct list') printf 'NAME    STATE\\ndevbox  Running\\nold-ct  Stopped\\n' ;;\n"
+              "'list ')   printf 'NAME    BACKEND  STATE\\nweb-vm  local    Running\\ndown    kubevirt Stopped\\n' ;;\n"
+              "esac\n");
+
+  blueshell_vm_providers_add_corral (containers);
+
+  g_assert_cmpuint (containers->len, ==, 2);
+  c = find_container (containers, "corral-web-vm");
+  g_assert_nonnull (c);
+  g_assert_cmpstr (ptyxis_ipc_container_get_icon_name (c), ==, "computer-symbolic");
+  c = find_container (containers, "corral-ct-devbox");
+  g_assert_nonnull (c);
+  g_assert_cmpstr (ptyxis_ipc_container_get_icon_name (c), ==, "container-generic-symbolic");
+  g_assert_null (find_container (containers, "corral-down"));
+  g_assert_null (find_container (containers, "corral-ct-old-ct"));
+}
+
+static void
 test_enumerate_respects_env (void)
 {
   /* Only lima enabled: incus shim exists but must not be consulted. */
@@ -217,6 +243,7 @@ main (int    argc,
   g_test_add_func ("/vm-providers/libvirt", test_libvirt);
   g_test_add_func ("/vm-providers/kubernetes", test_kubernetes);
   g_test_add_func ("/vm-providers/kubevirt", test_kubevirt);
+  g_test_add_func ("/vm-providers/corral", test_corral);
   g_test_add_func ("/vm-providers/enumerate-env", test_enumerate_respects_env);
 
   return g_test_run ();

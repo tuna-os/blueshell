@@ -106,6 +106,7 @@ export BLUESHELL_VM_PROVIDERS=lima,incus        # or: all
 | `libvirt` | `virsh` | `virsh console <domain>` (serial console; exit with `Ctrl+]`) |
 | `kubernetes` | `kubectl` | `kubectl exec -it <pod> [-c <container>] --` (current context/namespace) |
 | `kubevirt` | `virtctl` + `kubectl` | `virtctl console -n <ns> <vmi>` |
+| `corral` | `corral` | VMs: `corral ssh <name>` · containers: `corral ct console <name>` ([tuna-os/corral](https://github.com/tuna-os/corral)) |
 
 Only running instances are listed; a provider whose tool is missing is
 skipped silently. Enumeration happens at agent startup (restart the app to
