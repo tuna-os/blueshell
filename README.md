@@ -89,6 +89,28 @@ Agent resolution order:
 
 No extra configuration needed — if you have Toolbox or Distrobox installed, containers appear automatically.
 
+### VM and cluster targets (opt-in)
+
+Beyond containers, the agent can list VM and cluster shells in the new-tab
+menu. These are **off by default**; opt in with a comma list in
+`BLUESHELL_VM_PROVIDERS` (e.g. in `~/.profile`):
+
+```sh
+export BLUESHELL_VM_PROVIDERS=lima,incus        # or: all
+```
+
+| Provider | Needs on PATH | Opens a shell via |
+| --- | --- | --- |
+| `lima` | `limactl` | `limactl shell <name>` |
+| `incus` | `incus` | `incus exec <name> --` |
+| `libvirt` | `virsh` | `virsh console <domain>` (serial console; exit with `Ctrl+]`) |
+| `kubernetes` | `kubectl` | `kubectl exec -it <pod> [-c <container>] --` (current context/namespace) |
+| `kubevirt` | `virtctl` + `kubectl` | `virtctl console -n <ns> <vmi>` |
+
+Only running instances are listed; a provider whose tool is missing is
+skipped silently. Enumeration happens at agent startup (restart the app to
+pick up new VMs).
+
 ---
 
 ## Profile system
