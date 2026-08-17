@@ -12,6 +12,7 @@ const gtk = @import("gtk");
 const gresource = @import("../build/gresource.zig");
 const Common = @import("../class.zig").Common;
 const config_bridge = @import("config_bridge.zig");
+const logic = @import("preferences_logic.zig");
 const palette_mod = @import("palette.zig");
 const profile_store = @import("profile_store.zig");
 const Application = @import("application.zig").Application;
@@ -326,8 +327,19 @@ pub const PreferencesWindow = extern struct {
         // Shortcuts page: populate keybindings list.
         populateShortcuts(self);
 
-        // Profiles page: populate and wire the Add button.
+        // Profiles page: populate and wire the Add button. Row activation
+        // (= switch profile) is connected once here, NOT in
+        // populateProfiles — reconnecting on every repopulate stacks
+        // duplicate handlers.
         populateProfiles(self);
+        _ = gobject.signalConnectData(
+            priv.profiles_listbox.as(gobject.Object),
+            "row-activated",
+            @ptrCast(&profileRowActivated),
+            self,
+            null,
+            .{},
+        );
         _ = gobject.signalConnectData(
             priv.add_profile_button.as(gobject.Object),
             "clicked",
@@ -599,16 +611,6 @@ pub const PreferencesWindow = extern struct {
 
             priv.profiles_listbox.append(row.as(gtk.Widget));
         }
-
-        // Row activation = switch profile.
-        _ = gobject.signalConnectData(
-            priv.profiles_listbox.as(gobject.Object),
-            "row-activated",
-            @ptrCast(&profileRowActivated),
-            self,
-            null,
-            .{ .after = true }, // skip duplicate hookup on rebuild
-        );
     }
 
     fn freeCString(p: ?*anyopaque) callconv(.c) void {
@@ -686,30 +688,11 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn writeBellFeatures(audible: bool, attention: bool) void {
+        // Explicit polarities: attention defaults to *on* in Ghostty's
+        // parser, so omitting it could never turn it off.
         var buf: [128]u8 = undefined;
-        var n: usize = 0;
-        if (audible) {
-            const w = "audio";
-            std.mem.copyForwards(u8, buf[n..], w);
-            n += w.len;
-        }
-        if (attention) {
-            if (n > 0) {
-                buf[n] = ',';
-                n += 1;
-            }
-            const w = "attention";
-            std.mem.copyForwards(u8, buf[n..], w);
-            n += w.len;
-        }
-        // Title flash is sensible default; preserve.
-        if (n > 0) {
-            buf[n] = ',';
-            n += 1;
-        }
-        std.mem.copyForwards(u8, buf[n..], "title");
-        n += "title".len;
-        config_bridge.setKey(std.heap.c_allocator, "bell-features", buf[0..n], null) catch |err| {
+        const value = logic.formatBellFeatures(&buf, audible, attention);
+        config_bridge.setKey(std.heap.c_allocator, "bell-features", value, null) catch |err| {
             log.warn("bell-features write: {s}", .{@errorName(err)});
             return;
         };
@@ -738,10 +721,8 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn lineSpacingChanged(adj: *gtk.Adjustment, _: *Self) callconv(.c) void {
-        const v = adj.getValue();
-        const pct = (v - 1.0) * 100.0;
         var buf: [32]u8 = undefined;
-        const slice = std.fmt.bufPrint(&buf, "{d:.0}%", .{pct}) catch return;
+        const slice = logic.formatSpacingPercent(&buf, adj.getValue());
         config_bridge.setKey(std.heap.c_allocator, "adjust-cell-height", slice, null) catch |err| {
             log.warn("adjust-cell-height write: {s}", .{@errorName(err)});
             return;
@@ -750,10 +731,8 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn columnSpacingChanged(adj: *gtk.Adjustment, _: *Self) callconv(.c) void {
-        const v = adj.getValue();
-        const pct = (v - 1.0) * 100.0;
         var buf: [32]u8 = undefined;
-        const slice = std.fmt.bufPrint(&buf, "{d:.0}%", .{pct}) catch return;
+        const slice = logic.formatSpacingPercent(&buf, adj.getValue());
         config_bridge.setKey(std.heap.c_allocator, "adjust-cell-width", slice, null) catch |err| {
             log.warn("adjust-cell-width write: {s}", .{@errorName(err)});
             return;
@@ -762,12 +741,7 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn tabPositionChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const i = row.getSelected();
-        const value: []const u8 = switch (i) {
-            0 => "current",
-            1 => "end",
-            else => return,
-        };
+        const value = logic.comboValue(&logic.tab_position_values, row.getSelected()) orelse return;
         config_bridge.setKey(std.heap.c_allocator, "window-new-tab-position", value, null) catch |err| {
             log.warn("window-new-tab-position write: {s}", .{@errorName(err)});
             return;
@@ -790,33 +764,24 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn fontDescChanged(btn: *gtk.FontDialogButton, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+        // getFontDesc is (transfer none) — the description is owned by
+        // the button and must NOT be freed here.
         const desc = btn.getFontDesc() orelse return;
         const FdLibc = struct {
             extern "c" fn pango_font_description_to_string(d: *anyopaque) [*:0]u8;
-            extern "c" fn pango_font_description_free(d: *anyopaque) void;
             extern "c" fn g_free(p: ?*anyopaque) void;
         };
-        defer FdLibc.pango_font_description_free(@ptrCast(desc));
         const str_z = FdLibc.pango_font_description_to_string(@ptrCast(desc));
         defer FdLibc.g_free(@ptrCast(@constCast(str_z)));
-        const str = std.mem.span(str_z);
         // Pango format is "Family[,Family…] Size" e.g. "JetBrains Mono 13"
         // Ghostty config wants font-family + font-size separately.
-        if (std.mem.lastIndexOfScalar(u8, str, ' ')) |sp| {
-            const family = str[0..sp];
-            const size = str[sp + 1 ..];
-            config_bridge.setKey(std.heap.c_allocator, "font-family", family, null) catch |err| {
-                log.warn("font-family write: {s}", .{@errorName(err)});
-            };
-            // Only write size if it parses as a number.
-            if (std.fmt.parseFloat(f64, size)) |_| {
-                config_bridge.setKey(std.heap.c_allocator, "font-size", size, null) catch |err| {
-                    log.warn("font-size write: {s}", .{@errorName(err)});
-                };
-            } else |_| {}
-        } else {
-            config_bridge.setKey(std.heap.c_allocator, "font-family", str, null) catch |err| {
-                log.warn("font-family write: {s}", .{@errorName(err)});
+        const parts = logic.splitFontDesc(std.mem.span(str_z));
+        config_bridge.setKey(std.heap.c_allocator, "font-family", parts.family, null) catch |err| {
+            log.warn("font-family write: {s}", .{@errorName(err)});
+        };
+        if (parts.size) |size| {
+            config_bridge.setKey(std.heap.c_allocator, "font-size", size, null) catch |err| {
+                log.warn("font-size write: {s}", .{@errorName(err)});
             };
         }
         Application.default().triggerReload();
@@ -971,14 +936,7 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn cursorShapeChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const i = row.getSelected();
-        const value: []const u8 = switch (i) {
-            0 => "block",
-            1 => "block_hollow",
-            2 => "bar",
-            3 => "underline",
-            else => return,
-        };
+        const value = logic.comboValue(&logic.cursor_style_values, row.getSelected()) orelse return;
         config_bridge.setKey(std.heap.c_allocator, "cursor-style", value, null) catch |err| {
             log.warn("cursor-style write: {s}", .{@errorName(err)});
             return;
@@ -987,15 +945,8 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn cursorBlinkingChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const i = row.getSelected();
         // Index 0 = Follow System: clear the key so Ghostty uses its default.
-        // Index 1 = On, 2 = Off.
-        const value: []const u8 = switch (i) {
-            0 => "",
-            1 => "true",
-            2 => "false",
-            else => return,
-        };
+        const value = logic.comboValue(&logic.cursor_blink_values, row.getSelected()) orelse return;
         config_bridge.setKey(std.heap.c_allocator, "cursor-style-blink", value, null) catch |err| {
             log.warn("cursor-style-blink write: {s}", .{@errorName(err)});
             return;
@@ -1004,12 +955,7 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn scrollbarChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const i = row.getSelected();
-        const value: []const u8 = switch (i) {
-            0 => "system",
-            1 => "never",
-            else => return,
-        };
+        const value = logic.comboValue(&logic.scrollbar_values, row.getSelected()) orelse return;
         config_bridge.setKey(std.heap.c_allocator, "scrollbar", value, null) catch |err| {
             log.warn("scrollbar write: {s}", .{@errorName(err)});
             return;
@@ -1018,17 +964,9 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn writeScrollToBottom(keystroke: bool, output: bool) void {
-        var buf: [32]u8 = undefined;
-        var n: usize = 0;
-        const ks: []const u8 = if (keystroke) "keystroke" else "no-keystroke";
-        std.mem.copyForwards(u8, buf[n..], ks);
-        n += ks.len;
-        buf[n] = ',';
-        n += 1;
-        const op: []const u8 = if (output) "output" else "no-output";
-        std.mem.copyForwards(u8, buf[n..], op);
-        n += op.len;
-        config_bridge.setKey(std.heap.c_allocator, "scroll-to-bottom", buf[0..n], null) catch |err| {
+        var buf: [64]u8 = undefined;
+        const value = logic.formatScrollToBottom(&buf, keystroke, output);
+        config_bridge.setKey(std.heap.c_allocator, "scroll-to-bottom", value, null) catch |err| {
             log.warn("scroll-to-bottom write: {s}", .{@errorName(err)});
             return;
         };
@@ -1055,12 +993,7 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn tabBarChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const value: []const u8 = switch (row.getSelected()) {
-            0 => "auto",
-            1 => "always",
-            2 => "never",
-            else => return,
-        };
+        const value = logic.comboValue(&logic.tab_bar_values, row.getSelected()) orelse return;
         config_bridge.setKey(std.heap.c_allocator, "window-show-tab-bar", value, null) catch |err| {
             log.warn("window-show-tab-bar write: {s}", .{@errorName(err)});
             return;
@@ -1069,11 +1002,7 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn tabsLocationChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const value: []const u8 = switch (row.getSelected()) {
-            0 => "top",
-            1 => "bottom",
-            else => return,
-        };
+        const value = logic.comboValue(&logic.tabs_location_values, row.getSelected()) orelse return;
         config_bridge.setKey(std.heap.c_allocator, "gtk-tabs-location", value, null) catch |err| {
             log.warn("gtk-tabs-location write: {s}", .{@errorName(err)});
             return;
@@ -1091,12 +1020,7 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn windowSaveStateChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const value: []const u8 = switch (row.getSelected()) {
-            0 => "default",
-            1 => "never",
-            2 => "always",
-            else => return,
-        };
+        const value = logic.comboValue(&logic.window_save_state_values, row.getSelected()) orelse return;
         config_bridge.setKey(std.heap.c_allocator, "window-save-state", value, null) catch |err| {
             log.warn("window-save-state write: {s}", .{@errorName(err)});
             return;
@@ -1114,12 +1038,7 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn copyOnSelectChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const value: []const u8 = switch (row.getSelected()) {
-            0 => "false",
-            1 => "true",
-            2 => "clipboard",
-            else => return,
-        };
+        const value = logic.comboValue(&logic.copy_on_select_values, row.getSelected()) orelse return;
         config_bridge.setKey(std.heap.c_allocator, "copy-on-select", value, null) catch |err| {
             log.warn("copy-on-select write: {s}", .{@errorName(err)});
             return;
@@ -1128,16 +1047,7 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn shellIntegrationChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const value: []const u8 = switch (row.getSelected()) {
-            0 => "detect",
-            1 => "none",
-            2 => "bash",
-            3 => "elvish",
-            4 => "fish",
-            5 => "nushell",
-            6 => "zsh",
-            else => return,
-        };
+        const value = logic.comboValue(&logic.shell_integration_values, row.getSelected()) orelse return;
         config_bridge.setKey(std.heap.c_allocator, "shell-integration", value, null) catch |err| {
             log.warn("shell-integration write: {s}", .{@errorName(err)});
             return;
@@ -1146,12 +1056,7 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn notifyOnFinishChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const value: []const u8 = switch (row.getSelected()) {
-            0 => "never",
-            1 => "unfocused",
-            2 => "always",
-            else => return,
-        };
+        const value = logic.comboValue(&logic.notify_on_finish_values, row.getSelected()) orelse return;
         config_bridge.setKey(std.heap.c_allocator, "notify-on-command-finish", value, null) catch |err| {
             log.warn("notify-on-command-finish write: {s}", .{@errorName(err)});
             return;
@@ -1169,12 +1074,7 @@ pub const PreferencesWindow = extern struct {
     }
 
     fn confirmCloseChanged(row: *adw.ComboRow, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
-        const value: []const u8 = switch (row.getSelected()) {
-            0 => "false",
-            1 => "true",
-            2 => "always",
-            else => return,
-        };
+        const value = logic.comboValue(&logic.confirm_close_values, row.getSelected()) orelse return;
         config_bridge.setKey(std.heap.c_allocator, "confirm-close-surface", value, null) catch |err| {
             log.warn("confirm-close-surface write: {s}", .{@errorName(err)});
             return;
@@ -1357,6 +1257,8 @@ pub const PreferencesWindow = extern struct {
         return 1;
     }
 
+    var single_char_key: [1]u8 = undefined;
+
     /// Convert a GDK keyval to the Ghostty key name used in keybind config.
     fn gdkKeyvalToGhostty(keyval: c_uint) []const u8 {
         return switch (keyval) {
@@ -1402,14 +1304,12 @@ pub const PreferencesWindow = extern struct {
                 // For printable ASCII, use the lowercase character.
                 const unicode = gdk.keyvalToUnicode(keyval);
                 if (unicode > 0x20 and unicode < 0x7f) {
-                    // Return single-char slice from a static buffer. Since we
-                    // only use this in one place before copying, a small static
-                    // buffer is safe.
-                    const lower: u8 = std.ascii.toLower(@intCast(unicode & 0x7f));
-                    // Heap-allocate so the slice is stable.
-                    const alloc = std.heap.c_allocator;
-                    const s = alloc.dupe(u8, &[_]u8{lower}) catch break :key "unknown";
-                    break :key s;
+                    // Single-char key: return a slice of a container-level
+                    // buffer. Safe because GTK signal handlers run on the
+                    // single GTK main thread and the caller copies before
+                    // the next capture.
+                    single_char_key[0] = std.ascii.toLower(@intCast(unicode & 0x7f));
+                    break :key single_char_key[0..1];
                 }
                 break :key "unknown";
             },

@@ -56,6 +56,11 @@ zig build -Dapp-runtime=gtk -Doptimize=ReleaseFast
 ```
 
 See [HACKING.md](HACKING.md) for the full developer guide including the debug build workflow.
+Also see [TESTING.md](TESTING.md) for the test architecture (unit, integration,
+UI smoke, screenshot walkthrough), [UPSTREAM_SYNC.md](UPSTREAM_SYNC.md) for how
+the fork tracks upstream Ghostty, and
+[docs/TUNA_OS_PROMOTION.md](docs/TUNA_OS_PROMOTION.md) for the tuna-os
+promotion + Flatpak remote plan.
 
 ---
 

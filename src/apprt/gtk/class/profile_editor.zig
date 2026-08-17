@@ -8,6 +8,7 @@ const glib = @import("glib");
 const gresource = @import("../build/gresource.zig");
 const Common = @import("../class.zig").Common;
 const config_bridge = @import("config_bridge.zig");
+const logic = @import("preferences_logic.zig");
 const palette_mod = @import("palette.zig");
 const preferences_window = @import("preferences_window.zig");
 const profile_store = @import("profile_store.zig");
@@ -322,31 +323,23 @@ pub const ProfileEditor = extern struct {
 
     fn fontDescChanged(btn: *gtk.FontDialogButton, _: *gobject.ParamSpec, self: *Self) callconv(.c) void {
         const priv = self.private();
+        // getFontDesc is (transfer none) — the description is owned by
+        // the button and must NOT be freed here.
         const desc = btn.getFontDesc() orelse return;
         const FdLibc = struct {
             extern "c" fn pango_font_description_to_string(d: *anyopaque) [*:0]u8;
-            extern "c" fn pango_font_description_free(d: *anyopaque) void;
             extern "c" fn g_free(p: ?*anyopaque) void;
         };
-        defer FdLibc.pango_font_description_free(@ptrCast(desc));
         const str_z = FdLibc.pango_font_description_to_string(@ptrCast(desc));
         defer FdLibc.g_free(@ptrCast(@constCast(str_z)));
-        const str = std.mem.span(str_z);
 
-        if (std.mem.lastIndexOfScalar(u8, str, ' ')) |sp| {
-            const family = str[0..sp];
-            const size = str[sp + 1 ..];
-            config_bridge.setKey(std.heap.c_allocator, "font-family", family, priv.profile_path) catch |err| {
-                log.warn("font-family write failed: {s}", .{@errorName(err)});
-            };
-            if (std.fmt.parseFloat(f64, size)) |_| {
-                config_bridge.setKey(std.heap.c_allocator, "font-size", size, priv.profile_path) catch |err| {
-                    log.warn("font-size write failed: {s}", .{@errorName(err)});
-                };
-            } else |_| {}
-        } else {
-            config_bridge.setKey(std.heap.c_allocator, "font-family", str, priv.profile_path) catch |err| {
-                log.warn("font-family write failed: {s}", .{@errorName(err)});
+        const parts = logic.splitFontDesc(std.mem.span(str_z));
+        config_bridge.setKey(std.heap.c_allocator, "font-family", parts.family, priv.profile_path) catch |err| {
+            log.warn("font-family write failed: {s}", .{@errorName(err)});
+        };
+        if (parts.size) |size| {
+            config_bridge.setKey(std.heap.c_allocator, "font-size", size, priv.profile_path) catch |err| {
+                log.warn("font-size write failed: {s}", .{@errorName(err)});
             };
         }
         self.syncActiveProfile();

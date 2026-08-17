@@ -260,6 +260,183 @@ test "lineAssignsKey - simple" {
     try std.testing.expect(!lineAssignsKey("font-family = X", "background-opacity"));
 }
 
+// ---------------------------------------------------------------------
+// Hermetic file round-trip tests. All use the explicit-path parameter,
+// so nothing touches the user's real config.
+
+const TestFile = struct {
+    tmp: std.testing.TmpDir,
+    path: []u8,
+
+    fn init(alloc: Allocator) !TestFile {
+        var tmp = std.testing.tmpDir(.{});
+        errdefer tmp.cleanup();
+        const base = try tmp.dir.realpathAlloc(alloc, ".");
+        defer alloc.free(base);
+        const path = try std.fmt.allocPrint(alloc, "{s}/config", .{base});
+        return .{ .tmp = tmp, .path = path };
+    }
+
+    fn deinit(self: *TestFile, alloc: Allocator) void {
+        alloc.free(self.path);
+        self.tmp.cleanup();
+    }
+
+    fn write(self: *TestFile, contents: []const u8) !void {
+        const f = try std.fs.createFileAbsolute(self.path, .{ .truncate = true });
+        defer f.close();
+        try f.writeAll(contents);
+    }
+
+    fn read(self: *TestFile, alloc: Allocator) ![]u8 {
+        const f = try std.fs.openFileAbsolute(self.path, .{});
+        defer f.close();
+        return try f.readToEndAlloc(alloc, 1 << 20);
+    }
+};
+
+test "config_bridge: setKey creates file and appends" {
+    const alloc = std.testing.allocator;
+    var tf = try TestFile.init(alloc);
+    defer tf.deinit(alloc);
+
+    try setKey(alloc, "background-opacity", "0.85", tf.path);
+    const out = try tf.read(alloc);
+    defer alloc.free(out);
+    try std.testing.expectEqualStrings("background-opacity = 0.85\n", out);
+}
+
+test "config_bridge: setKey replaces last occurrence, preserves comments" {
+    const alloc = std.testing.allocator;
+    var tf = try TestFile.init(alloc);
+    defer tf.deinit(alloc);
+
+    try tf.write(
+        \\# my config
+        \\background-opacity = 0.5
+        \\font-family = X
+        \\background-opacity = 0.6
+        \\
+    );
+    try setKey(alloc, "background-opacity", "0.9", tf.path);
+    const out = try tf.read(alloc);
+    defer alloc.free(out);
+    try std.testing.expectEqualStrings(
+        \\# my config
+        \\background-opacity = 0.5
+        \\font-family = X
+        \\background-opacity = 0.9
+        \\
+    , out);
+}
+
+test "config_bridge: setKey appends to file without trailing newline" {
+    const alloc = std.testing.allocator;
+    var tf = try TestFile.init(alloc);
+    defer tf.deinit(alloc);
+
+    try tf.write("font-family = X"); // no trailing \n
+    try setKey(alloc, "cursor-style", "bar", tf.path);
+    const out = try tf.read(alloc);
+    defer alloc.free(out);
+    try std.testing.expectEqualStrings("font-family = X\ncursor-style = bar\n", out);
+}
+
+test "config_bridge: setKey replaces final line lacking trailing newline" {
+    const alloc = std.testing.allocator;
+    var tf = try TestFile.init(alloc);
+    defer tf.deinit(alloc);
+
+    try tf.write("a = 1\ncursor-style = block"); // no trailing \n
+    try setKey(alloc, "cursor-style", "bar", tf.path);
+    const out = try tf.read(alloc);
+    defer alloc.free(out);
+    try std.testing.expectEqualStrings("a = 1\ncursor-style = bar\n", out);
+}
+
+test "config_bridge: setKeyList removes all then appends" {
+    const alloc = std.testing.allocator;
+    var tf = try TestFile.init(alloc);
+    defer tf.deinit(alloc);
+
+    try tf.write(
+        \\palette = 0=#000000
+        \\font-family = X
+        \\palette = 1=#111111
+        \\
+    );
+    try setKeyList(alloc, "palette", &.{ "0=#aaaaaa", "1=#bbbbbb" }, tf.path);
+    const out = try tf.read(alloc);
+    defer alloc.free(out);
+    try std.testing.expectEqualStrings(
+        \\font-family = X
+        \\palette = 0=#aaaaaa
+        \\palette = 1=#bbbbbb
+        \\
+    , out);
+}
+
+test "config_bridge: setKeybind adds, replaces, and removes" {
+    const alloc = std.testing.allocator;
+    var tf = try TestFile.init(alloc);
+    defer tf.deinit(alloc);
+
+    try setKeybind(alloc, "ctrl+t", "new_tab", tf.path);
+    {
+        const out = try tf.read(alloc);
+        defer alloc.free(out);
+        try std.testing.expectEqualStrings("keybind = ctrl+t=new_tab\n", out);
+    }
+
+    // Replacing the same trigger leaves a single line.
+    try setKeybind(alloc, "ctrl+t", "new_window", tf.path);
+    {
+        const out = try tf.read(alloc);
+        defer alloc.free(out);
+        try std.testing.expectEqualStrings("keybind = ctrl+t=new_window\n", out);
+    }
+
+    // Removing (null action) deletes the line, keeps other bindings.
+    try setKeybind(alloc, "ctrl+d", "inspector:toggle", tf.path);
+    try setKeybind(alloc, "ctrl+t", null, tf.path);
+    {
+        const out = try tf.read(alloc);
+        defer alloc.free(out);
+        try std.testing.expectEqualStrings("keybind = ctrl+d=inspector:toggle\n", out);
+    }
+}
+
+test "config_bridge: emitted file parses with Ghostty's real config loader" {
+    const alloc = std.testing.allocator;
+    var tf = try TestFile.init(alloc);
+    defer tf.deinit(alloc);
+
+    // Write the same keys the preferences UI writes.
+    try setKey(alloc, "background-opacity", "0.85", tf.path);
+    try setKey(alloc, "cursor-style", "block_hollow", tf.path);
+    try setKey(alloc, "bell-features", "audio,no-attention,title", tf.path);
+    try setKey(alloc, "scroll-to-bottom", "no-keystroke,output", tf.path);
+    try setKeybind(alloc, "ctrl+t", "new_tab", tf.path);
+    try setKeyList(alloc, "palette", &.{ "0=#1e1e1e", "1=#ff5555" }, tf.path);
+
+    const Config = @import("../../../config.zig").Config;
+    var cfg = try Config.default(alloc);
+    defer cfg.deinit();
+    try cfg.loadFile(alloc, tf.path);
+    try cfg.finalize();
+
+    try std.testing.expectApproxEqAbs(@as(f64, 0.85), cfg.@"background-opacity", 0.001);
+    try std.testing.expectEqual(.block_hollow, cfg.@"cursor-style");
+    try std.testing.expect(cfg.@"bell-features".audio);
+    try std.testing.expect(!cfg.@"bell-features".attention);
+    try std.testing.expect(cfg.@"bell-features".title);
+    try std.testing.expect(!cfg.@"scroll-to-bottom".keystroke);
+    try std.testing.expect(cfg.@"scroll-to-bottom".output);
+    // The config must parse with zero diagnostics — a diagnostic means
+    // the UI wrote a line Ghostty rejects.
+    try std.testing.expect(cfg._diagnostics.empty());
+}
+
 test "lineAssignsKeybind" {
     try std.testing.expect(lineAssignsKeybind("keybind = backspace=text:\\x7f", "backspace"));
     try std.testing.expect(lineAssignsKeybind("  keybind=backspace = text:\\x7f", "backspace"));

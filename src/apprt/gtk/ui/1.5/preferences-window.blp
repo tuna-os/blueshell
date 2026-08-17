@@ -15,6 +15,7 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
   }
 
   Adw.PreferencesPage appearance_page {
+    name: "appearance";
     title: _("Appearance");
     icon-name: "font-select-symbolic";
 
@@ -183,6 +184,7 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
   }
 
   Adw.PreferencesPage behavior_page {
+    name: "behavior";
     title: _("Behavior");
     icon-name: "preferences-desktop-accessibility-symbolic";
 
@@ -390,6 +392,7 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
   }
 
   Adw.PreferencesPage shortcuts_page {
+    name: "shortcuts";
     title: _("Shortcuts");
     icon-name: "preferences-desktop-keyboard-shortcuts-symbolic";
 
@@ -397,16 +400,28 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
       title: _("Config");
       description: _("Keybindings are set via `keybind = trigger=action` lines in your config file. Active bindings are listed below.");
 
-      Adw.ButtonRow open_config_row {
+      // Adw.ButtonRow requires libadwaita 1.6; this template must build
+      // against 1.5, so these are activatable ActionRows instead.
+      Adw.ActionRow open_config_row {
         title: _("Open Config File");
-        start-icon-name: "document-edit-symbolic";
+        activatable: true;
         action-name: "app.open-config";
+
+        [prefix]
+        Image {
+          icon-name: "document-edit-symbolic";
+        }
       }
 
-      Adw.ButtonRow reload_config_row {
+      Adw.ActionRow reload_config_row {
         title: _("Reload Config");
-        start-icon-name: "view-refresh-symbolic";
+        activatable: true;
         action-name: "app.reload-config";
+
+        [prefix]
+        Image {
+          icon-name: "view-refresh-symbolic";
+        }
       }
     }
 
@@ -424,6 +439,7 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
   }
 
   Adw.PreferencesPage profiles_page {
+    name: "profiles";
     title: _("Profiles");
     icon-name: "system-users-symbolic";
 

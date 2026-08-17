@@ -8,6 +8,12 @@
 //!
 //! Operations are file-level snapshots. Switching = copy profile over
 //! the active config + record name in .active + reload-config.
+//!
+//! Every operation has an `*In` variant taking explicit absolute paths
+//! (active config file + profiles dir); the default-named wrappers
+//! resolve the XDG paths above and delegate. Tests use the `*In`
+//! variants against a temp directory so they never touch the real
+//! config (see profile_store tests at the bottom).
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -62,21 +68,21 @@ pub fn profilesDir(alloc: Allocator) ![]u8 {
 }
 
 pub fn profilePath(alloc: Allocator, name: []const u8) ![]u8 {
-    if (!isValidName(name)) return error.NameInvalid;
     const dir = try profilesDir(alloc);
     defer alloc.free(dir);
+    return try profilePathIn(alloc, dir, name);
+}
+
+pub fn profilePathIn(alloc: Allocator, dir: []const u8, name: []const u8) ![]u8 {
+    if (!isValidName(name)) return error.NameInvalid;
     return try std.fmt.allocPrint(alloc, "{s}/{s}.config", .{ dir, name });
 }
 
-fn activeMarkerPath(alloc: Allocator) ![]u8 {
-    const dir = try profilesDir(alloc);
-    defer alloc.free(dir);
+fn activeMarkerPathIn(alloc: Allocator, dir: []const u8) ![]u8 {
     return try std.fmt.allocPrint(alloc, "{s}/.active", .{dir});
 }
 
-fn ensureProfilesDir(alloc: Allocator) !void {
-    const dir = try profilesDir(alloc);
-    defer alloc.free(dir);
+fn ensureDir(dir: []const u8) !void {
     std.fs.makeDirAbsolute(dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => return err,
@@ -86,7 +92,13 @@ fn ensureProfilesDir(alloc: Allocator) !void {
 /// Read the active profile name. Returns null if the marker file is
 /// missing or empty (meaning: "no profile mapping — config is freeform").
 pub fn activeProfileName(alloc: Allocator) !?[]u8 {
-    const path = try activeMarkerPath(alloc);
+    const dir = try profilesDir(alloc);
+    defer alloc.free(dir);
+    return try activeProfileNameIn(alloc, dir);
+}
+
+pub fn activeProfileNameIn(alloc: Allocator, dir: []const u8) !?[]u8 {
+    const path = try activeMarkerPathIn(alloc, dir);
     defer alloc.free(path);
     const f = std.fs.openFileAbsolute(path, .{}) catch |err| switch (err) {
         error.FileNotFound => return null,
@@ -100,9 +112,9 @@ pub fn activeProfileName(alloc: Allocator) !?[]u8 {
     return try alloc.dupe(u8, trimmed);
 }
 
-fn writeActiveMarker(alloc: Allocator, name: []const u8) !void {
-    try ensureProfilesDir(alloc);
-    const path = try activeMarkerPath(alloc);
+fn writeActiveMarkerIn(alloc: Allocator, dir: []const u8, name: []const u8) !void {
+    try ensureDir(dir);
+    const path = try activeMarkerPathIn(alloc, dir);
     defer alloc.free(path);
     const f = try std.fs.createFileAbsolute(path, .{ .truncate = true });
     defer f.close();
@@ -112,14 +124,17 @@ fn writeActiveMarker(alloc: Allocator, name: []const u8) !void {
 /// List profile snapshots on disk. Caller owns the returned slice and
 /// each entry (call deinit on each, then free the slice).
 pub fn list(alloc: Allocator) ![]Profile {
+    const dir = try profilesDir(alloc);
+    defer alloc.free(dir);
+    return try listIn(alloc, dir);
+}
+
+pub fn listIn(alloc: Allocator, dir_path: []const u8) ![]Profile {
     var out: std.ArrayList(Profile) = .empty;
     errdefer {
         for (out.items) |p| p.deinit(alloc);
         out.deinit(alloc);
     }
-
-    const dir_path = try profilesDir(alloc);
-    defer alloc.free(dir_path);
 
     var dir = std.fs.openDirAbsolute(dir_path, .{ .iterate = true }) catch |err| switch (err) {
         error.FileNotFound => return try out.toOwnedSlice(alloc),
@@ -128,7 +143,7 @@ pub fn list(alloc: Allocator) ![]Profile {
     };
     defer dir.close();
 
-    const active_name = try activeProfileName(alloc);
+    const active_name = try activeProfileNameIn(alloc, dir_path);
     defer if (active_name) |a| alloc.free(a);
 
     var it = dir.iterate();
@@ -177,29 +192,40 @@ pub fn copyFile(alloc: Allocator, src: []const u8, dst: []const u8) !void {
 
 /// Create a new profile by snapshotting the current active config.
 pub fn add(alloc: Allocator, name: []const u8) !void {
-    if (!isValidName(name)) return error.NameInvalid;
-    try ensureProfilesDir(alloc);
+    const cfg = try activeConfigPath(alloc);
+    defer alloc.free(cfg);
+    const dir = try profilesDir(alloc);
+    defer alloc.free(dir);
+    try addIn(alloc, cfg, dir, name);
+}
 
-    const dst = try profilePath(alloc, name);
+pub fn addIn(alloc: Allocator, config_path: []const u8, dir: []const u8, name: []const u8) !void {
+    if (!isValidName(name)) return error.NameInvalid;
+    try ensureDir(dir);
+
+    const dst = try profilePathIn(alloc, dir, name);
     defer alloc.free(dst);
 
-    std.fs.accessAbsolute(dst, .{}) catch |err| switch (err) {
-        error.FileNotFound => {}, // good — doesn't exist yet
-        else => return err, // some other access error
-    };
     if (std.fs.accessAbsolute(dst, .{})) |_| {
         return error.AlreadyExists;
-    } else |_| {}
+    } else |err| switch (err) {
+        error.FileNotFound => {}, // good — doesn't exist yet
+        else => return err,
+    }
 
-    const src = try activeConfigPath(alloc);
-    defer alloc.free(src);
-    try copyFile(alloc, src, dst);
+    try copyFile(alloc, config_path, dst);
     log.info("created profile {s} -> {s}", .{ name, dst });
 }
 
 /// Delete a profile snapshot.
 pub fn delete(alloc: Allocator, name: []const u8) !void {
-    const path = try profilePath(alloc, name);
+    const dir = try profilesDir(alloc);
+    defer alloc.free(dir);
+    try deleteIn(alloc, dir, name);
+}
+
+pub fn deleteIn(alloc: Allocator, dir: []const u8, name: []const u8) !void {
+    const path = try profilePathIn(alloc, dir, name);
     defer alloc.free(path);
     std.fs.deleteFileAbsolute(path) catch |err| switch (err) {
         error.FileNotFound => return error.ProfileNotFound,
@@ -207,10 +233,10 @@ pub fn delete(alloc: Allocator, name: []const u8) !void {
     };
     // If this was the active profile, clear the marker so the next
     // launch doesn't reference a non-existent profile.
-    if (try activeProfileName(alloc)) |active| {
+    if (try activeProfileNameIn(alloc, dir)) |active| {
         defer alloc.free(active);
         if (std.mem.eql(u8, active, name)) {
-            const m = try activeMarkerPath(alloc);
+            const m = try activeMarkerPathIn(alloc, dir);
             defer alloc.free(m);
             std.fs.deleteFileAbsolute(m) catch {};
         }
@@ -221,23 +247,25 @@ pub fn delete(alloc: Allocator, name: []const u8) !void {
 /// Switch to a profile: copy the snapshot over the active config, mark
 /// it as active. Caller should follow up with Application.triggerReload.
 pub fn switchTo(alloc: Allocator, name: []const u8) !void {
-    const src = try profilePath(alloc, name);
+    const cfg = try activeConfigPath(alloc);
+    defer alloc.free(cfg);
+    const dir = try profilesDir(alloc);
+    defer alloc.free(dir);
+    try switchToIn(alloc, cfg, dir, name);
+}
+
+pub fn switchToIn(alloc: Allocator, config_path: []const u8, dir: []const u8, name: []const u8) !void {
+    const src = try profilePathIn(alloc, dir, name);
     defer alloc.free(src);
     // Verify the snapshot exists before clobbering the active config.
-    _ = std.fs.openFileAbsolute(src, .{}) catch |err| switch (err) {
+    const check = std.fs.openFileAbsolute(src, .{}) catch |err| switch (err) {
         error.FileNotFound => return error.ProfileNotFound,
         else => return err,
     };
-    const dst = try activeConfigPath(alloc);
-    defer alloc.free(dst);
-    if (std.fs.path.dirname(dst)) |d| {
-        std.fs.makeDirAbsolute(d) catch |err| switch (err) {
-            error.PathAlreadyExists => {},
-            else => return err,
-        };
-    }
-    try copyFile(alloc, src, dst);
-    try writeActiveMarker(alloc, name);
+    check.close();
+    if (std.fs.path.dirname(config_path)) |d| try ensureDir(d);
+    try copyFile(alloc, src, config_path);
+    try writeActiveMarkerIn(alloc, dir, name);
     log.info("switched to profile {s}", .{name});
 }
 
@@ -245,15 +273,22 @@ pub fn switchTo(alloc: Allocator, name: []const u8) !void {
 /// (i.e. "save changes" — overwrites the snapshot with the active
 /// config file contents).
 pub fn updateFromActive(alloc: Allocator, name: []const u8) !void {
-    const dst = try profilePath(alloc, name);
+    const cfg = try activeConfigPath(alloc);
+    defer alloc.free(cfg);
+    const dir = try profilesDir(alloc);
+    defer alloc.free(dir);
+    try updateFromActiveIn(alloc, cfg, dir, name);
+}
+
+pub fn updateFromActiveIn(alloc: Allocator, config_path: []const u8, dir: []const u8, name: []const u8) !void {
+    const dst = try profilePathIn(alloc, dir, name);
     defer alloc.free(dst);
-    _ = std.fs.openFileAbsolute(dst, .{}) catch |err| switch (err) {
+    const check = std.fs.openFileAbsolute(dst, .{}) catch |err| switch (err) {
         error.FileNotFound => return error.ProfileNotFound,
         else => return err,
     };
-    const src = try activeConfigPath(alloc);
-    defer alloc.free(src);
-    try copyFile(alloc, src, dst);
+    check.close();
+    try copyFile(alloc, config_path, dst);
     log.info("updated profile {s} from active config", .{name});
 }
 
@@ -264,4 +299,153 @@ test "isValidName" {
     try std.testing.expect(!isValidName("../escape"));
     try std.testing.expect(!isValidName("with space"));
     try std.testing.expect(!isValidName("dot.in.name"));
+}
+
+// ---------------------------------------------------------------------
+// Hermetic filesystem tests against a temp directory.
+
+const TestEnv = struct {
+    tmp: std.testing.TmpDir,
+    base: []u8, // absolute path of tmp dir
+    config_path: []u8, // <base>/config
+    profiles_dir: []u8, // <base>/profiles
+
+    fn init(alloc: Allocator) !TestEnv {
+        var tmp = std.testing.tmpDir(.{});
+        errdefer tmp.cleanup();
+        const base = try tmp.dir.realpathAlloc(alloc, ".");
+        errdefer alloc.free(base);
+        const config_path = try std.fmt.allocPrint(alloc, "{s}/config", .{base});
+        errdefer alloc.free(config_path);
+        const profiles_dir = try std.fmt.allocPrint(alloc, "{s}/profiles", .{base});
+        return .{ .tmp = tmp, .base = base, .config_path = config_path, .profiles_dir = profiles_dir };
+    }
+
+    fn deinit(self: *TestEnv, alloc: Allocator) void {
+        alloc.free(self.profiles_dir);
+        alloc.free(self.config_path);
+        alloc.free(self.base);
+        self.tmp.cleanup();
+    }
+
+    fn writeConfig(self: *TestEnv, contents: []const u8) !void {
+        const f = try std.fs.createFileAbsolute(self.config_path, .{ .truncate = true });
+        defer f.close();
+        try f.writeAll(contents);
+    }
+
+    fn readConfig(self: *TestEnv, alloc: Allocator) ![]u8 {
+        const f = try std.fs.openFileAbsolute(self.config_path, .{});
+        defer f.close();
+        return try f.readToEndAlloc(alloc, 1 << 20);
+    }
+};
+
+test "profile_store: add/list/switch/delete round-trip" {
+    const alloc = std.testing.allocator;
+    var env = try TestEnv.init(alloc);
+    defer env.deinit(alloc);
+
+    // Snapshot the current config as "work".
+    try env.writeConfig("background-opacity = 0.9\n");
+    try addIn(alloc, env.config_path, env.profiles_dir, "work");
+
+    // Duplicate add is rejected.
+    try std.testing.expectError(
+        error.AlreadyExists,
+        addIn(alloc, env.config_path, env.profiles_dir, "work"),
+    );
+
+    // Change the active config, snapshot as "play".
+    try env.writeConfig("background-opacity = 0.5\n");
+    try addIn(alloc, env.config_path, env.profiles_dir, "play");
+
+    // Both listed, sorted, neither active yet.
+    {
+        const profiles = try listIn(alloc, env.profiles_dir);
+        defer {
+            for (profiles) |p| p.deinit(alloc);
+            alloc.free(profiles);
+        }
+        try std.testing.expectEqual(@as(usize, 2), profiles.len);
+        try std.testing.expectEqualStrings("play", profiles[0].name);
+        try std.testing.expectEqualStrings("work", profiles[1].name);
+        try std.testing.expect(!profiles[0].active and !profiles[1].active);
+    }
+
+    // Switch to "work": config contents replaced, marker set.
+    try switchToIn(alloc, env.config_path, env.profiles_dir, "work");
+    {
+        const cfg = try env.readConfig(alloc);
+        defer alloc.free(cfg);
+        try std.testing.expectEqualStrings("background-opacity = 0.9\n", cfg);
+        const active = (try activeProfileNameIn(alloc, env.profiles_dir)).?;
+        defer alloc.free(active);
+        try std.testing.expectEqualStrings("work", active);
+    }
+
+    // list marks the active profile.
+    {
+        const profiles = try listIn(alloc, env.profiles_dir);
+        defer {
+            for (profiles) |p| p.deinit(alloc);
+            alloc.free(profiles);
+        }
+        try std.testing.expect(!profiles[0].active); // play
+        try std.testing.expect(profiles[1].active); // work
+    }
+
+    // Switching to a missing profile fails without touching the config.
+    try std.testing.expectError(
+        error.ProfileNotFound,
+        switchToIn(alloc, env.config_path, env.profiles_dir, "missing"),
+    );
+
+    // updateFromActive: edit config, save back into "work".
+    try env.writeConfig("background-opacity = 0.7\n");
+    try updateFromActiveIn(alloc, env.config_path, env.profiles_dir, "work");
+    {
+        const p = try profilePathIn(alloc, env.profiles_dir, "work");
+        defer alloc.free(p);
+        const f = try std.fs.openFileAbsolute(p, .{});
+        defer f.close();
+        const data = try f.readToEndAlloc(alloc, 1 << 20);
+        defer alloc.free(data);
+        try std.testing.expectEqualStrings("background-opacity = 0.7\n", data);
+    }
+
+    // Deleting the active profile clears the marker.
+    try deleteIn(alloc, env.profiles_dir, "work");
+    try std.testing.expect(try activeProfileNameIn(alloc, env.profiles_dir) == null);
+    try std.testing.expectError(
+        error.ProfileNotFound,
+        deleteIn(alloc, env.profiles_dir, "work"),
+    );
+}
+
+test "profile_store: add with no active config starts empty" {
+    const alloc = std.testing.allocator;
+    var env = try TestEnv.init(alloc);
+    defer env.deinit(alloc);
+
+    // No config file exists — snapshot is empty rather than an error.
+    try addIn(alloc, env.config_path, env.profiles_dir, "fresh");
+    const p = try profilePathIn(alloc, env.profiles_dir, "fresh");
+    defer alloc.free(p);
+    const f = try std.fs.openFileAbsolute(p, .{});
+    defer f.close();
+    const data = try f.readToEndAlloc(alloc, 1 << 20);
+    defer alloc.free(data);
+    try std.testing.expectEqual(@as(usize, 0), data.len);
+}
+
+test "profile_store: invalid names rejected at every entry point" {
+    const alloc = std.testing.allocator;
+    var env = try TestEnv.init(alloc);
+    defer env.deinit(alloc);
+
+    try std.testing.expectError(error.NameInvalid, addIn(alloc, env.config_path, env.profiles_dir, "../evil"));
+    try std.testing.expectError(error.NameInvalid, deleteIn(alloc, env.profiles_dir, "a/b"));
+    try std.testing.expectError(error.NameInvalid, switchToIn(alloc, env.config_path, env.profiles_dir, ""));
+    try std.testing.expectError(error.NameInvalid, profilePathIn(alloc, env.profiles_dir, "x y"));
 }
