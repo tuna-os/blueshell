@@ -71,7 +71,7 @@ jobs:
             src/apprt/gtk/class/palettes_embed.zig
 
       - name: Cache zig packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/zig
           key: zig-pkg-${{ hashFiles('build.zig.zon') }}
