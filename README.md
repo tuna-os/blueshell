@@ -2,7 +2,7 @@
 
 **BlueShell** is a container-oriented terminal emulator for GNOME, combining the Ptyxis-style user experience with the Ghostty rendering engine. It brings first-class container support (Toolbox, Distrobox, Podman) together with Ghostty's high-performance HarfBuzz text rendering, Kitty graphics protocol, OSC 8 hyperlinks, GPU acceleration, and splits — packaged in Ptyxis's polished GNOME interface.
 
-App ID: `dev.hanthor.BlueShell`
+App ID: `org.tunaos.BlueShell`
 
 ---
 
@@ -49,7 +49,7 @@ curl -L https://nightly.link/tuna-os/blueshell/workflows/ghostty-ptyxis/ptyxis-p
 ### Flatpak — build from source
 
 ```sh
-flatpak-builder --install --user build-dir flatpak/dev.hanthor.BlueShell.yml
+flatpak-builder --install --user build-dir flatpak/org.tunaos.BlueShell.yml
 ```
 
 ### Build from source
