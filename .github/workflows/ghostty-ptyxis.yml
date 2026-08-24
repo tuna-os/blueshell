@@ -23,6 +23,6 @@ jobs:
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: BlueShell.flatpak
-          manifest-path: flatpak/dev.hanthor.BlueShell.yml
+          manifest-path: flatpak/org.tunaos.BlueShell.yml
           cache-key: flatpak-builder-${{ github.sha }}
           upload-artifact: true

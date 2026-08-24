@@ -10,12 +10,9 @@ name: Publish Flatpak
 # skopeo gets a writable auth file.
 #
 # Push-triggered publishes gate on the repo living in the tuna-os org;
-# manual dispatch also works pre-transfer from the fork: the image then
-# goes to the fork owner's ghcr namespace, and the tuna-os/docs index
-# update runs when the FLATPAK_INDEX_TOKEN secret (PAT with push access
-# to tuna-os/docs) is set — otherwise the run uploads a ready-to-merge
-# index snippet artifact instead. Note: pre-rename builds carry the
-# dev.hanthor.BlueShell app id, so that's the install name they publish.
+# manual dispatch also works from forks: the image then goes to the fork
+# owner's ghcr namespace, and the tuna-os/docs index update runs when the
+# FLATPAK_INDEX_TOKEN secret is set.
 
 on:
   push:
@@ -28,9 +25,8 @@ permissions:
   packages: write
 
 env:
-  # Flip both to the org.tunaos id at promotion step 2.
-  APP_ID: dev.hanthor.BlueShell
-  MANIFEST: flatpak/dev.hanthor.BlueShell.yml
+  APP_ID: org.tunaos.BlueShell
+  MANIFEST: flatpak/org.tunaos.BlueShell.yml
   # ghcr.io/<owner>/blueshell — tuna-os after the transfer, the fork
   # owner before it (GITHUB_TOKEN can only write its own namespace).
   IMAGE: ghcr.io/${{ github.repository_owner }}/blueshell

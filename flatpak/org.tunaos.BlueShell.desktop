@@ -6,11 +6,11 @@ Comment=Container-native terminal powered by Ghostty
 Type=Application
 TryExec=ghostty
 Exec=ghostty --gtk-single-instance=false
-Icon=dev.hanthor.BlueShell
+Icon=org.tunaos.BlueShell
 Categories=System;TerminalEmulator;
 Keywords=terminal;tty;pty;container;toolbox;distrobox;podman;
 StartupNotify=true
-StartupWMClass=dev.hanthor.BlueShell
+StartupWMClass=org.tunaos.BlueShell
 Terminal=false
 Actions=new-window;
 X-GNOME-UsesNotifications=true

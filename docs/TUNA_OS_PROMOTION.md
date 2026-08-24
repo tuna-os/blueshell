@@ -29,22 +29,22 @@ After transfer, in the new repo:
 - Update the repo description/topics; keep the `upstream-sync` label
   (the weekly sync workflow creates issues with it).
 
-## 2. Rename the app ID: `dev.hanthor.BlueShell` → `org.tunaos.BlueShell`
+## 2. Rename the app ID: `dev.hanthor.BlueShell` → `org.tunaos.BlueShell` — ✅ DONE
 
 TunaOS convention is `org.tunaos.<App>`. One PR, mechanical:
 
 | File | Change |
 | --- | --- |
-| `flatpak/dev.hanthor.BlueShell.yml` | rename file, `app-id:` field |
-| `flatpak/dev.hanthor.BlueShell.desktop` | rename file; update `Icon=` and `StartupWMClass=` |
-| `flatpak/dev.hanthor.BlueShell.svg` | rename file (manifest install path follows app ID) |
+| `flatpak/org.tunaos.BlueShell.yml` | renamed file, `app-id:` field |
+| `flatpak/org.tunaos.BlueShell.desktop` | renamed file; updated `Icon=` and `StartupWMClass=` |
+| `flatpak/org.tunaos.BlueShell.svg` | renamed file (manifest install path follows app ID) |
 | `.github/workflows/ghostty-ptyxis.yml` | `manifest-path`, bundle name |
 | `.github/workflows/publish-flatpak.yml` | `APP_ID` env at the top |
 | `README.md`, `HACKING.md` | install commands, App ID mention |
 
 Notes:
 
-- **Icon: done.** `flatpak/dev.hanthor.BlueShell.svg` is original
+- **Icon: done.** `flatpak/org.tunaos.BlueShell.svg` is original
   BlueShell artwork (blue scallop + terminal prompt), installed by the
   manifest under the app ID; `rename-icon` was dropped so Ghostty's
   unlicensed icon is no longer shipped. Rename the SVG alongside the

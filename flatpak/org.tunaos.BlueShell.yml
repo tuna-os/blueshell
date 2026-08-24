@@ -1,4 +1,4 @@
-app-id: dev.hanthor.BlueShell
+app-id: org.tunaos.BlueShell
 runtime: org.gnome.Platform
 runtime-version: "50"
 sdk: org.gnome.Sdk
@@ -74,14 +74,14 @@ modules:
         --search-prefix /app
         --system $PWD/vendor/p
       # Install our custom desktop file (overrides the upstream one).
-      - install -Dm644 flatpak/dev.hanthor.BlueShell.desktop
-          /app/share/applications/dev.hanthor.BlueShell.desktop
+      - install -Dm644 flatpak/org.tunaos.BlueShell.desktop
+          /app/share/applications/org.tunaos.BlueShell.desktop
       # Install the BlueShell icon (original artwork; Ghostty's icon is
       # unlicensed to us). Upstream's com.mitchellh.ghostty icons stay
       # installed but are not exported (flatpak exports only app-id-named
       # icons).
-      - install -Dm644 flatpak/dev.hanthor.BlueShell.svg
-          /app/share/icons/hicolor/scalable/apps/dev.hanthor.BlueShell.svg
+      - install -Dm644 flatpak/org.tunaos.BlueShell.svg
+          /app/share/icons/hicolor/scalable/apps/org.tunaos.BlueShell.svg
     sources:
       - type: dir
         path: ..
