@@ -29,6 +29,10 @@ jobs:
     name: Unit + integration tests
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # contents: write is only exercised by the screenshots-branch publish
+    # step below, which runs on pushes to ptyxis-port (never on PRs).
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
 
@@ -128,3 +132,19 @@ jobs:
           path: walkthrough/
           if-no-files-found: warn
           retention-days: 14
+
+      # Keep the latest walkthrough available at stable raw URLs
+      # (https://raw.githubusercontent.com/tuna-os/blueshell/screenshots/shots/*.png)
+      # so the docs site and README can embed auto-updating screenshots.
+      - name: Publish screenshots to the screenshots branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/ptyxis-port'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan screenshots-publish
+          git rm -rf --cached . >/dev/null
+          mkdir -p shots
+          cp walkthrough/*.png shots/
+          git add -f shots
+          git commit -m "ci: walkthrough screenshots for $GITHUB_SHA"
+          git push -f origin HEAD:screenshots
