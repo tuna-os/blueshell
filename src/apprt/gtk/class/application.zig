@@ -1279,6 +1279,10 @@ pub const Application = extern struct {
         // Sync our accelerators for menu items.
         self.syncActionAccelerators();
 
+        // Sync our light/dark mode with the (possibly changed)
+        // window-theme configuration.
+        self.syncStyleManager();
+
         // Load our runtime and custom CSS. If this fails then our window is
         // just stuck with the old CSS but we don't want to fail the entire
         // config change operation.
@@ -1706,23 +1710,9 @@ pub const Application = extern struct {
     /// setup our initial light/dark mode based on the configuration and
     /// setup listeners for changes to the style manager.
     fn startupStyleManager(self: *Self) void {
-        const priv = self.private();
-        const config = priv.config.get();
-
         // Setup our initial light/dark
         const style = self.as(adw.Application).getStyleManager();
-        style.setColorScheme(switch (config.@"window-theme") {
-            .auto, .ghostty => auto: {
-                const lum = config.background.toTerminalRGB().perceivedLuminance();
-                break :auto if (lum > 0.5)
-                    .prefer_light
-                else
-                    .prefer_dark;
-            },
-            .system => .prefer_light,
-            .dark => .force_dark,
-            .light => .force_light,
-        });
+        self.syncStyleManager();
 
         // Setup color change notifications
         _ = gobject.Object.signals.notify.connect(
@@ -1737,6 +1727,34 @@ pub const Application = extern struct {
         // if our current theme matches what libghostty has so its safe to
         // call.
         handleStyleManagerDark(style, undefined, self);
+    }
+
+    /// The color scheme (light or dark) the application is currently
+    /// rendering with, as reported by the libadwaita style manager.
+    pub fn colorScheme(self: *Self) apprt.ColorScheme {
+        const style = self.as(adw.Application).getStyleManager();
+        return if (style.getDark() == 0) .light else .dark;
+    }
+
+    /// Apply `window-theme` to the libadwaita style manager. This is called
+    /// on startup and again whenever the configuration changes so that the
+    /// light/dark selector (and `window-theme` in general) applies without
+    /// requiring a restart.
+    fn syncStyleManager(self: *Self) void {
+        const config = self.private().config.get();
+        const style = self.as(adw.Application).getStyleManager();
+        style.setColorScheme(switch (config.@"window-theme") {
+            .auto, .ghostty => auto: {
+                const lum = config.background.toTerminalRGB().perceivedLuminance();
+                break :auto if (lum > 0.5)
+                    .prefer_light
+                else
+                    .prefer_dark;
+            },
+            .system => .prefer_light,
+            .dark => .force_dark,
+            .light => .force_light,
+        });
     }
 
     /// Setup signal handlers

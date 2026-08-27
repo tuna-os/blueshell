@@ -13,6 +13,7 @@ const gresource = @import("../build/gresource.zig");
 const Common = @import("../class.zig").Common;
 const config_bridge = @import("config_bridge.zig");
 const logic = @import("preferences_logic.zig");
+const osc_palette = @import("osc_palette.zig");
 const palette_mod = @import("palette.zig");
 const profile_store = @import("profile_store.zig");
 const Application = @import("application.zig").Application;
@@ -1408,7 +1409,7 @@ pub const PreferencesWindow = extern struct {
         );
 
         for (palettes, 0..) |p, idx| {
-            const v: *const palette_mod.Variant = if (p.dark.background != null) &p.dark else &p.light;
+            const v = osc_palette.variantFor(&p, Application.default().colorScheme());
             const bg = v.background orelse palette_mod.RGB{ .r = 0x20, .g = 0x20, .b = 0x20 };
             const fg = v.foreground orelse palette_mod.RGB{ .r = 0xe0, .g = 0xe0, .b = 0xe0 };
             const muted = palette_mod.RGB{
@@ -1453,7 +1454,7 @@ pub const PreferencesWindow = extern struct {
     /// stylesheet installed by buildPaletteCSS provides the colors via
     /// the unique `pp-card-{idx}` class.
     pub fn makePaletteCard(p: palette_mod.Palette, idx: usize) ?*gtk.Button {
-        const v: *const palette_mod.Variant = if (p.dark.background != null) &p.dark else &p.light;
+        const v = osc_palette.variantFor(&p, Application.default().colorScheme());
 
         // Outer vertical box: name (top), sample (middle), color strip (bottom).
         const box = gtk.Box.new(gtk.Orientation.vertical, 8);
@@ -1543,6 +1544,12 @@ pub const PreferencesWindow = extern struct {
     }
 
     /// Apply a palette by id/name, writing to `maybe_path` (null = active config).
+    ///
+    /// Ptyxis palettes carry both a light and a dark variant, so we write
+    /// each variant out as a Ghostty theme file and point `theme` at the
+    /// pair (`theme = light:...,dark:...`). That way the terminal colors
+    /// follow the system light/dark preference just like the rest of the
+    /// desktop. Palettes that only define a single variant use it for both.
     pub fn applyPaletteToPath(id: []const u8, maybe_path: ?[]const u8) !void {
         const alloc = std.heap.c_allocator;
         const all = try palette_mod.loadAll(alloc);
@@ -1555,35 +1562,96 @@ pub const PreferencesWindow = extern struct {
             }
             return error.PaletteNotFound;
         };
-        const v: *const palette_mod.Variant = if (p.dark.background != null) &p.dark else &p.light;
 
-        var hex_buf: [16]u8 = undefined;
-        if (v.background) |c| {
-            const h = try std.fmt.bufPrint(&hex_buf, "#{x:0>2}{x:0>2}{x:0>2}", .{ c.r, c.g, c.b });
-            try config_bridge.setKey(alloc, "background", h, maybe_path);
+        const light: *const palette_mod.Variant = if (p.light.background != null)
+            &p.light
+        else
+            &p.dark;
+        const dark: *const palette_mod.Variant = if (p.dark.background != null)
+            &p.dark
+        else
+            &p.light;
+
+        const base = try config_bridge.sanitizeThemeName(alloc, p.id);
+        defer alloc.free(base);
+
+        const light_name = try std.fmt.allocPrint(alloc, "blueshell-{s}-light", .{base});
+        defer alloc.free(light_name);
+        const dark_name = try std.fmt.allocPrint(alloc, "blueshell-{s}-dark", .{base});
+        defer alloc.free(dark_name);
+
+        {
+            const contents = try renderTheme(alloc, p.name, "light", light);
+            defer alloc.free(contents);
+            try config_bridge.writeTheme(alloc, light_name, contents);
         }
-        if (v.foreground) |c| {
-            const h = try std.fmt.bufPrint(&hex_buf, "#{x:0>2}{x:0>2}{x:0>2}", .{ c.r, c.g, c.b });
-            try config_bridge.setKey(alloc, "foreground", h, maybe_path);
+        {
+            const contents = try renderTheme(alloc, p.name, "dark", dark);
+            defer alloc.free(contents);
+            try config_bridge.writeTheme(alloc, dark_name, contents);
         }
-        if (v.cursor) |c| {
-            const h = try std.fmt.bufPrint(&hex_buf, "#{x:0>2}{x:0>2}{x:0>2}", .{ c.r, c.g, c.b });
-            try config_bridge.setKey(alloc, "cursor-color", h, maybe_path);
-        }
-        var entry_storage: [16][16]u8 = undefined;
-        var entry_slices: [16][]const u8 = undefined;
-        var n_entries: usize = 0;
+
+        const value = try std.fmt.allocPrint(
+            alloc,
+            "light:{s},dark:{s}",
+            .{ light_name, dark_name },
+        );
+        defer alloc.free(value);
+        try config_bridge.setKey(alloc, "theme", value, maybe_path);
+
+        // Colors written directly by an older palette apply (or by hand)
+        // take precedence over the theme, so clear them out.
+        try config_bridge.removeKey(alloc, "background", maybe_path);
+        try config_bridge.removeKey(alloc, "foreground", maybe_path);
+        try config_bridge.removeKey(alloc, "cursor-color", maybe_path);
+        try config_bridge.removeKey(alloc, "palette", maybe_path);
+
+        log.info("applied palette: {s} (theme = {s})", .{ p.name, value });
+        if (maybe_path == null) Application.default().triggerReload();
+    }
+
+    /// Render one palette variant as the contents of a Ghostty theme file.
+    /// Caller owns the returned slice.
+    pub fn renderTheme(
+        alloc: std.mem.Allocator,
+        name: []const u8,
+        variant_name: []const u8,
+        v: *const palette_mod.Variant,
+    ) ![]u8 {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(alloc);
+        const w = out.writer(alloc);
+
+        try w.print(
+            \\# {s} ({s})
+            \\#
+            \\# Generated by BlueShell from a Ptyxis color palette.
+            \\# This file is overwritten whenever the palette is applied.
+            \\
+            \\
+        , .{ name, variant_name });
+
+        if (v.background) |c| try w.print(
+            "background = #{x:0>2}{x:0>2}{x:0>2}\n",
+            .{ c.r, c.g, c.b },
+        );
+        if (v.foreground) |c| try w.print(
+            "foreground = #{x:0>2}{x:0>2}{x:0>2}\n",
+            .{ c.r, c.g, c.b },
+        );
+        if (v.cursor) |c| try w.print(
+            "cursor-color = #{x:0>2}{x:0>2}{x:0>2}\n",
+            .{ c.r, c.g, c.b },
+        );
         for (v.colors, 0..) |maybe, i| {
             const c = maybe orelse continue;
-            const slice = try std.fmt.bufPrint(&entry_storage[n_entries], "{d}=#{x:0>2}{x:0>2}{x:0>2}", .{ i, c.r, c.g, c.b });
-            entry_slices[n_entries] = slice;
-            n_entries += 1;
+            try w.print(
+                "palette = {d}=#{x:0>2}{x:0>2}{x:0>2}\n",
+                .{ i, c.r, c.g, c.b },
+            );
         }
-        if (n_entries > 0) {
-            try config_bridge.setKeyList(alloc, "palette", entry_slices[0..n_entries], maybe_path);
-        }
-        log.info("applied palette: {s} ({d} entries)", .{ p.name, n_entries });
-        if (maybe_path == null) Application.default().triggerReload();
+
+        return try out.toOwnedSlice(alloc);
     }
 
     const C = Common(Self, Private);

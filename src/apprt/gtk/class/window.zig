@@ -280,6 +280,11 @@ pub const Window = extern struct {
         theme_light: ?*gtk.CheckButton = null,
         theme_dark: ?*gtk.CheckButton = null,
 
+        /// Set while we're updating the style selector to match the
+        /// config so that the resulting "toggled" signals don't write
+        /// the config (and trigger a reload) right back.
+        theme_syncing: bool = false,
+
         pub var offset: c_int = 0;
     };
 
@@ -595,34 +600,39 @@ pub const Window = extern struct {
             .light => 1,
             .dark, .ghostty => 2,
         };
-        _ = self;
+
+        const priv = self.private();
+        priv.theme_syncing = true;
+        defer priv.theme_syncing = false;
+
         follow.setActive(if (active_idx == 0) 1 else 0);
         light.setActive(if (active_idx == 1) 1 else 0);
         dark.setActive(if (active_idx == 2) 1 else 0);
     }
 
-    fn themeFollowToggled(btn: *gtk.CheckButton, self: *Self) callconv(.c) void {
+    /// Write `window-theme` to the user's config and reload, unless we're
+    /// the ones who just set the button state.
+    fn setWindowTheme(self: *Self, btn: *gtk.CheckButton, value: [:0]const u8) void {
         if (btn.getActive() == 0) return;
-        _ = self;
+        if (self.private().theme_syncing) return;
         const config_bridge = @import("config_bridge.zig");
-        config_bridge.setKey(std.heap.c_allocator, "window-theme", "auto", null) catch {};
+        config_bridge.setKey(std.heap.c_allocator, "window-theme", value, null) catch |err| {
+            log.warn("window-theme write: {s}", .{@errorName(err)});
+            return;
+        };
         Application.default().triggerReload();
+    }
+
+    fn themeFollowToggled(btn: *gtk.CheckButton, self: *Self) callconv(.c) void {
+        self.setWindowTheme(btn, "system");
     }
 
     fn themeLightToggled(btn: *gtk.CheckButton, self: *Self) callconv(.c) void {
-        if (btn.getActive() == 0) return;
-        _ = self;
-        const config_bridge = @import("config_bridge.zig");
-        config_bridge.setKey(std.heap.c_allocator, "window-theme", "light", null) catch {};
-        Application.default().triggerReload();
+        self.setWindowTheme(btn, "light");
     }
 
     fn themeDarkToggled(btn: *gtk.CheckButton, self: *Self) callconv(.c) void {
-        if (btn.getActive() == 0) return;
-        _ = self;
-        const config_bridge = @import("config_bridge.zig");
-        config_bridge.setKey(std.heap.c_allocator, "window-theme", "dark", null) catch {};
-        Application.default().triggerReload();
+        self.setWindowTheme(btn, "dark");
     }
 
     /// Setup our action map.
@@ -2450,8 +2460,12 @@ pub const Window = extern struct {
         const s_ptr = glib.Variant.getString(p, &len);
         const s = s_ptr[0..len];
 
-        const value: []const u8 = if (std.mem.eql(u8, s, "auto"))
-            "auto"
+        const value: []const u8 = if (std.mem.eql(u8, s, "auto") or
+            std.mem.eql(u8, s, "system"))
+            // "auto" derives the style from the configured background
+            // color, which is not what "follow the system" means. Both
+            // spellings select the system style.
+            "system"
         else if (std.mem.eql(u8, s, "light"))
             "light"
         else if (std.mem.eql(u8, s, "dark"))

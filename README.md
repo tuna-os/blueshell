@@ -14,6 +14,7 @@ App ID: `org.tunaos.BlueShell`
 | **Container integration** | First-class — spawn shells in Toolbox / Distrobox / Podman from the new-tab menu via `ptyxis-agent` |
 | **Profiles** | Ptyxis-style per-profile config snapshots — palette, font, opacity, cursor, command, scrollback |
 | **Preferences window** | Full Ptyxis-style UI — palette picker, font, cursor, scrollback, window theme, shell integration, notifications |
+| **Light / dark** | Follows the desktop light/dark preference out of the box; the Ptyxis-style System / Light / Dark picker in the main menu overrides it |
 | **Splits / tabs** | Ghostty splits + tab overview |
 | **Command palette** | Ghostty fuzzy command palette |
 | **Desktop** | GNOME / Libadwaita, Wayland + X11 |
