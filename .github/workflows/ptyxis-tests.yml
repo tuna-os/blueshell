@@ -62,6 +62,7 @@ jobs:
       - name: zig fmt check (fork-owned sources)
         run: |
           zig fmt --check \
+            src/apprt/gtk/class/agent_monitor.zig \
             src/apprt/gtk/class/preferences_window.zig \
             src/apprt/gtk/class/preferences_logic.zig \
             src/apprt/gtk/class/profile_editor.zig \
@@ -100,6 +101,7 @@ jobs:
           zig build test -fno-sys=gtk4-layer-shell -Dtest-filter=config_bridge
           zig build test -fno-sys=gtk4-layer-shell -Dtest-filter=profile_store
           zig build test -fno-sys=gtk4-layer-shell -Dtest-filter=preferences_logic
+          zig build test -fno-sys=gtk4-layer-shell -Dtest-filter=agent_monitor
 
       - name: ptyxis-agent unit tests (VM providers)
         run: |

@@ -1230,6 +1230,37 @@ command: ?Command = null,
 /// Available since 1.3.0.
 @"notify-on-command-finish": NotifyOnCommandFinish = .never,
 
+/// AI agent CLIs to detect in terminal tabs (BlueShell, RFC #22).
+///
+/// When a listed process (e.g. `claude`, `codex`, `aider`, `goose`) is in
+/// the foreground of a tab's terminal, BlueShell tracks the agent's state
+/// — idle, working, blocked on a question, or done — and shows it as an
+/// indicator icon on the tab, with a needs-attention pulse when the agent
+/// is blocked or finished. The tab overview then doubles as an agent
+/// dashboard, and "Next Blocked Agent" in the main menu jumps to the next
+/// tab waiting on input.
+///
+/// A process matches if its name equals the value or its command line
+/// contains it (so `claude` also matches `node …/claude-code/cli.js`).
+/// This can be repeated to detect multiple agents. Detection is
+/// heuristic: state classification is based on output activity and
+/// prompt-like text, in the spirit of herdr.
+///
+/// Empty by default: no detection, no overhead. Only supported on the
+/// GTK (Linux) apprt.
+@"agent-detect": RepeatableString = .{},
+
+/// Send a desktop notification when a detected agent (see `agent-detect`)
+/// becomes blocked on a question or finishes, and the tab is not focused.
+/// Defaults to false.
+@"agent-notify": bool = false,
+
+/// Tint the terminal background of a detected agent's tab while the agent
+/// is blocked on a question (see `agent-detect`), so the waiting tab is
+/// visible at a glance. The tint is removed as soon as the agent resumes.
+/// Defaults to false.
+@"agent-colors": bool = false,
+
 /// If command finished notifications are enabled, this controls how the user is
 /// notified.
 ///
