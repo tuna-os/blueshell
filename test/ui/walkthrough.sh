@@ -116,6 +116,7 @@ shoot 07-theme-dark "" GHOSTTY_PTYXIS_WALKTHROUGH=1
 write_config <<EOF
 command = $FAKE_AGENT
 agent-detect = claude
+agent-colors = true
 window-show-tab-bar = always
 EOF
 SETTLE_SECS_SAVED="$SETTLE_SECS"

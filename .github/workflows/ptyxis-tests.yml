@@ -40,7 +40,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libgtk-4-dev libadwaita-1-dev gettext libbz2-dev libonig-dev \
+            libgtk-4-dev libadwaita-1-dev adwaita-icon-theme gettext libbz2-dev libonig-dev \
             libxml2-utils python3-gi xvfb dbus dbus-x11
 
       - name: Install blueprint-compiler 0.16 (Ubuntu 24.04 ships 0.12)
