@@ -15,6 +15,7 @@ App ID: `org.tunaos.BlueShell`
 | **Profiles** | Ptyxis-style per-profile config snapshots — palette, font, opacity, cursor, command, scrollback |
 | **Preferences window** | Full Ptyxis-style UI — palette picker, font, cursor, scrollback, window theme, shell integration, notifications |
 | **Light / dark** | Follows the desktop light/dark preference out of the box; the Ptyxis-style System / Light / Dark picker in the main menu overrides it |
+| **Agent awareness** | herdr-style AI agent tracking (opt-in via `agent-detect`) — per-tab idle / working / blocked / done badges, desktop notifications, blocked-tab tint, "Next Blocked Agent" |
 | **Splits / tabs** | Ghostty splits + tab overview |
 | **Command palette** | Ghostty fuzzy command palette |
 | **Desktop** | GNOME / Libadwaita, Wayland + X11 |

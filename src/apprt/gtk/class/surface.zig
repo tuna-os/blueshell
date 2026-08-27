@@ -36,6 +36,8 @@ const Window = @import("window.zig").Window;
 const InspectorWindow = @import("inspector_window.zig").InspectorWindow;
 const i18n = @import("../../../os/i18n.zig");
 const media = @import("../media.zig");
+const builtin = @import("builtin");
+const agent_monitor = @import("agent_monitor.zig");
 
 const log = std.log.scoped(.gtk_ghostty_surface);
 
@@ -668,6 +670,16 @@ pub const Surface = extern struct {
 
         // Progress bar
         progress_bar_timer: ?c_uint = null,
+
+        // Agent awareness (RFC #22). The timer runs only while
+        // `agent-detect` is non-empty; see agentTick.
+        agent_timer: ?c_uint = null,
+        agent_state: agent_monitor.State = .none,
+        agent_seen: bool = false,
+        agent_screen_hash: u64 = 0,
+        agent_quiet_ticks: u32 = 0,
+        agent_name: [32]u8 = undefined,
+        agent_name_len: u8 = 0,
 
         // True while the bell is ringing. This will be set to false (after
         // true) under various scenarios, but can also manually be set to
@@ -1895,6 +1907,13 @@ pub const Surface = extern struct {
             priv.progress_bar_timer = null;
         }
 
+        if (priv.agent_timer) |timer| {
+            if (glib.Source.remove(timer) == 0) {
+                log.warn("unable to remove agent timer", .{});
+            }
+            priv.agent_timer = null;
+        }
+
         if (priv.idle_rechild) |v| {
             if (glib.Source.remove(v) == 0) {
                 log.warn("unable to remove idle source", .{});
@@ -2312,6 +2331,261 @@ pub const Surface = extern struct {
                 &valign,
             );
         }
+
+        // agent-detect: start the agent monitor timer when the feature is
+        // enabled. The disabled case is handled inside agentTick, which
+        // notices the empty list, resets state, and removes itself.
+        if (config.@"agent-detect".list.items.len > 0 and
+            priv.agent_timer == null)
+        {
+            priv.agent_timer = glib.timeoutAdd(
+                agent_tick_ms,
+                agentTick,
+                self,
+            );
+        }
+    }
+
+    /// Milliseconds between agent monitor ticks (RFC #22). Two seconds
+    /// mirrors herdr's sampling rate; agent_monitor.quiet_threshold is
+    /// expressed in these ticks.
+    const agent_tick_ms = 2 * std.time.ms_per_s;
+
+    /// One agent monitor tick: inspect the pty's foreground process,
+    /// sample the viewport for activity, advance the state machine, and
+    /// apply any side effects (badge, notification, tint).
+    fn agentTick(ud: ?*anyopaque) callconv(.c) c_int {
+        const self: *Self = @ptrCast(@alignCast(ud.?));
+        const priv = self.private();
+
+        const config_obj = priv.config orelse
+            return @intFromBool(glib.SOURCE_CONTINUE);
+        const config = config_obj.get();
+        const names = config.@"agent-detect".list.items;
+        if (names.len == 0) {
+            // Feature was turned off: reset and stop ticking.
+            priv.agent_timer = null;
+            priv.agent_seen = false;
+            priv.agent_screen_hash = 0;
+            priv.agent_quiet_ticks = 0;
+            self.setAgentState(.none);
+            return @intFromBool(glib.SOURCE_REMOVE);
+        }
+
+        const core_surface = priv.core_surface orelse
+            return @intFromBool(glib.SOURCE_CONTINUE);
+
+        // Detect a configured agent in the pty's foreground.
+        var name_buf: [32]u8 = undefined;
+        const detected = detectForegroundAgent(core_surface, names, &name_buf);
+        if (detected) |name| {
+            priv.agent_seen = true;
+            const n = @min(name.len, priv.agent_name.len);
+            @memcpy(priv.agent_name[0..n], name[0..n]);
+            priv.agent_name_len = @intCast(n);
+        }
+
+        // No agent now and none seen: nothing to track; keep the sampling
+        // state clean so the next detection starts fresh.
+        if (detected == null and !priv.agent_seen) {
+            priv.agent_screen_hash = 0;
+            priv.agent_quiet_ticks = 0;
+            self.setAgentState(.none);
+            return @intFromBool(glib.SOURCE_CONTINUE);
+        }
+
+        // Sample the viewport for output activity and prompt-like text.
+        const alloc = Application.default().allocator();
+        const dump: []const u8 = dump: {
+            core_surface.renderer_state.mutex.lock();
+            defer core_surface.renderer_state.mutex.unlock();
+            const screen = core_surface.renderer_state.terminal.screens.active;
+            break :dump screen.dumpStringAlloc(
+                alloc,
+                .{ .viewport = .{} },
+            ) catch "";
+        };
+        defer if (dump.len > 0) alloc.free(dump);
+
+        const hash = std.hash.Wyhash.hash(0, dump);
+        const changed = priv.agent_screen_hash != 0 and
+            hash != priv.agent_screen_hash;
+        priv.agent_screen_hash = hash;
+        if (changed) {
+            priv.agent_quiet_ticks = 0;
+        } else {
+            priv.agent_quiet_ticks +|= 1;
+        }
+
+        const next_state = agent_monitor.next(priv.agent_state, .{
+            .agent_present = detected != null,
+            .agent_seen = priv.agent_seen,
+            .screen_changed = changed,
+            .quiet_ticks = priv.agent_quiet_ticks,
+            .tail = dump[dump.len -| 2048..],
+        });
+        self.setAgentState(next_state);
+
+        return @intFromBool(glib.SOURCE_CONTINUE);
+    }
+
+    /// Read /proc/<pid>/<name> into buf. Linux only.
+    fn readProcFile(pid: std.posix.pid_t, comptime name: []const u8, buf: []u8) ?[]u8 {
+        var path_buf: [64]u8 = undefined;
+        const path = std.fmt.bufPrint(
+            &path_buf,
+            "/proc/{d}/" ++ name,
+            .{pid},
+        ) catch return null;
+        const file = std.fs.openFileAbsolute(path, .{}) catch return null;
+        defer file.close();
+        const n = file.read(buf) catch return null;
+        return buf[0..n];
+    }
+
+    /// Return the configured agent name matching the pty's foreground
+    /// process, or null. The returned slice points into `buf`.
+    fn detectForegroundAgent(
+        core_surface: *CoreSurface,
+        names: []const [:0]const u8,
+        buf: []u8,
+    ) ?[]const u8 {
+        // Foreground process inspection relies on /proc.
+        if (comptime builtin.os.tag != .linux) return null;
+
+        const master: std.posix.fd_t = switch (core_surface.io.backend) {
+            .exec => |*v| master: {
+                const pty = v.subprocess.pty orelse return null;
+                break :master pty.master;
+            },
+        };
+        const pgrp = std.posix.tcgetpgrp(master) catch return null;
+        if (pgrp <= 0) return null;
+
+        var comm_buf: [64]u8 = undefined;
+        const comm = std.mem.trimRight(
+            u8,
+            readProcFile(pgrp, "comm", &comm_buf) orelse "",
+            "\n",
+        );
+
+        var cmd_buf: [512]u8 = undefined;
+        const cmdline: []u8 = readProcFile(pgrp, "cmdline", &cmd_buf) orelse
+            cmd_buf[0..0];
+        // cmdline is NUL-separated argv; flatten for substring matching.
+        for (cmdline) |*c| {
+            if (c.* == 0) c.* = ' ';
+        }
+
+        const name = agent_monitor.matchAgent(names, comm, cmdline) orelse
+            return null;
+        const n = @min(name.len, buf.len);
+        @memcpy(buf[0..n], name[0..n]);
+        return buf[0..n];
+    }
+
+    /// Transition the agent state and apply side effects: tab badge,
+    /// desktop notification, and background tint.
+    fn setAgentState(self: *Self, state: agent_monitor.State) void {
+        const priv = self.private();
+        const prev = priv.agent_state;
+        if (prev == state) return;
+        priv.agent_state = state;
+        log.debug("agent state {s} -> {s}", .{ @tagName(prev), @tagName(state) });
+
+        // Badge on our containing tab (bubbles to the Tab widget).
+        _ = self.as(gtk.Widget).activateActionVariant(
+            "tab.agent-state",
+            glib.Variant.newString(@tagName(state)),
+        );
+
+        const config = if (priv.config) |c| c.get() else return;
+
+        // Background tint while blocked (agent-colors).
+        if (config.@"agent-colors") {
+            if (state == .blocked) {
+                self.agentApplyTint(config);
+            } else if (prev == .blocked) {
+                self.agentResetTint();
+            }
+        }
+
+        // Desktop notifications (agent-notify): working -> blocked and
+        // (working|blocked) -> done, only when the surface isn't focused —
+        // a focused tab is already being watched.
+        if (config.@"agent-notify" and !self.getFocused()) notify: {
+            const alloc = Application.default().allocator();
+            const name: []const u8 = if (priv.agent_name_len > 0)
+                priv.agent_name[0..priv.agent_name_len]
+            else
+                "agent";
+
+            const blocked = prev == .working and state == .blocked;
+            const done = (prev == .working or prev == .blocked) and
+                state == .done;
+            if (!blocked and !done) break :notify;
+
+            const title_ = if (blocked)
+                i18n._("Agent Waiting for Input")
+            else
+                i18n._("Agent Finished");
+
+            const body = if (blocked)
+                std.fmt.allocPrintSentinel(
+                    alloc,
+                    "{s} appears to be waiting for your input.",
+                    .{name},
+                    0,
+                ) catch break :notify
+            else
+                std.fmt.allocPrintSentinel(
+                    alloc,
+                    "{s} finished.",
+                    .{name},
+                    0,
+                ) catch break :notify;
+            defer alloc.free(body);
+
+            self.sendDesktopNotification(std.mem.span(title_), body);
+        }
+    }
+
+    /// Inject an OSC 11 tint of the configured background toward amber,
+    /// marking a blocked agent tab. Same injection mechanism as the
+    /// per-surface palettes (osc_palette.zig): the bytes go through the
+    /// terminal parser; the child process never sees them.
+    fn agentApplyTint(self: *Self, config: *const configpkg.Config) void {
+        const priv = self.private();
+        const core_surface = priv.core_surface orelse return;
+        const alloc = std.heap.c_allocator;
+
+        // Blend 75% background + 25% amber (Adwaita yellow-4).
+        const bg = config.background;
+        const r: u8 = @intCast((@as(u32, bg.r) * 3 + 0xe5) / 4);
+        const g: u8 = @intCast((@as(u32, bg.g) * 3 + 0xa5) / 4);
+        const b: u8 = @intCast((@as(u32, bg.b) * 3 + 0x0a) / 4);
+
+        const bytes = std.fmt.allocPrint(
+            alloc,
+            "\x1b]11;#{x:0>2}{x:0>2}{x:0>2}\x07",
+            .{ r, g, b },
+        ) catch return;
+        core_surface.io.queueMessage(.{ .inject_output = .{
+            .alloc = alloc,
+            .data = bytes,
+        } }, .unlocked);
+    }
+
+    /// Reset the OSC 11 background override applied by agentApplyTint.
+    fn agentResetTint(self: *Self) void {
+        const priv = self.private();
+        const core_surface = priv.core_surface orelse return;
+        const alloc = std.heap.c_allocator;
+        const bytes = alloc.dupe(u8, "\x1b]111\x07") catch return;
+        core_surface.io.queueMessage(.{ .inject_output = .{
+            .alloc = alloc,
+            .data = bytes,
+        } }, .unlocked);
     }
 
     fn propError(
@@ -2770,6 +3044,12 @@ pub const Surface = extern struct {
 
         // Bell stops ringing as soon as we gain focus
         if (focused) self.setBellRinging(false);
+
+        // Looking at a finished agent acknowledges it.
+        if (focused and priv.agent_state == .done) {
+            priv.agent_seen = false;
+            self.setAgentState(.none);
+        }
     }
 
     /// The focus callback must be triggered on an idle loop source because

@@ -421,6 +421,10 @@ pub const Window = extern struct {
         const overview_section = gio.Menu.new();
         defer _ = gobject.Object.unref(overview_section.as(gobject.Object));
         overview_section.append("Show Open Tabs", "win.tab-overview");
+        // Agent awareness (RFC #22): jump to the next tab whose agent is
+        // waiting on input. No-op when agent detection is off or nothing
+        // is blocked.
+        overview_section.append("Next Blocked Agent", "win.next-blocked-agent");
         menu.appendSection(null, overview_section.as(gio.MenuModel));
 
         // Section 5: Fullscreen toggle.
@@ -671,6 +675,7 @@ pub const Window = extern struct {
             .init("fullscreen", actionFullscreen, null),
             .init("unfullscreen", actionUnfullscreen, null),
             .init("tab-overview", actionTabOverview, null),
+            .init("next-blocked-agent", actionNextBlockedAgent, null),
         };
 
         ext.actions.add(Self, self, &actions);
@@ -2447,6 +2452,37 @@ pub const Window = extern struct {
 
     fn alloc(_: *Self) std.mem.Allocator {
         return std.heap.c_allocator;
+    }
+
+    /// Select the next tab (cycling from the current selection) whose
+    /// agent state is blocked (RFC #22). Does nothing when no agent tab
+    /// is waiting on input.
+    fn actionNextBlockedAgent(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const priv = self.private();
+        const tab_view = priv.tab_view;
+        const n = tab_view.getNPages();
+        if (n <= 0) return;
+
+        const start: c_int = start: {
+            const selected = tab_view.getSelectedPage() orelse break :start 0;
+            break :start tab_view.getPagePosition(selected);
+        };
+
+        var i: c_int = 1;
+        while (i <= n) : (i += 1) {
+            const idx = @mod(start + i, n);
+            const page = tab_view.getNthPage(idx);
+            const child = page.getChild();
+            const tab = gobject.ext.cast(Tab, child) orelse continue;
+            if (tab.getAgentState() == .blocked) {
+                tab_view.setSelectedPage(page);
+                return;
+            }
+        }
     }
 
     fn actionSetTheme(

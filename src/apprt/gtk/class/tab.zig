@@ -16,6 +16,7 @@ const Application = @import("application.zig").Application;
 const SplitTree = @import("split_tree.zig").SplitTree;
 const Surface = @import("surface.zig").Surface;
 const TitleDialog = @import("title_dialog.zig").TitleDialog;
+const agent_monitor = @import("agent_monitor.zig");
 
 const log = std.log.scoped(.gtk_ghostty_window);
 
@@ -185,6 +186,11 @@ pub const Tab = extern struct {
         /// The tooltip of this tab. This is usually bound to the active surface.
         tooltip: ?[:0]const u8 = null,
 
+        /// Agent awareness (RFC #22): the last state reported by a
+        /// surface in this tab via the `tab.agent-state` action. Shown
+        /// as the TabPage indicator icon.
+        agent_state: agent_monitor.State = .none,
+
         // Template bindings
         split_tree: *SplitTree,
 
@@ -257,6 +263,7 @@ pub const Tab = extern struct {
         const actions = [_]ext.actions.Action(Self){
             .init("close", actionClose, s_param_type),
             .init("ring-bell", actionRingBell, null),
+            .init("agent-state", actionAgentState, s_param_type),
             .init("next-page", actionNextPage, null),
             .init("previous-page", actionPreviousPage, null),
             .init("prompt-tab-title", actionPromptTabTitle, null),
@@ -484,6 +491,57 @@ pub const Tab = extern struct {
         const page = self.getTabPage() orelse return;
         if (page.getSelected() != 0) return;
         page.setNeedsAttention(@intFromBool(true));
+    }
+
+    /// The agent state last reported for this tab (RFC #22).
+    pub fn getAgentState(self: *Self) agent_monitor.State {
+        return self.private().agent_state;
+    }
+
+    /// Handle an agent state report from one of our surfaces (bubbled up
+    /// as `tab.agent-state` with the state name as parameter). Updates the
+    /// TabPage indicator icon and pulses needs-attention on blocked/done.
+    fn actionAgentState(
+        _: *gio.SimpleAction,
+        parameter_: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const parameter = parameter_ orelse return;
+        var len: usize = 0;
+        const str_ptr = glib.Variant.getString(parameter, &len);
+        const state = std.meta.stringToEnum(
+            agent_monitor.State,
+            str_ptr[0..len],
+        ) orelse return;
+
+        const priv = self.private();
+        priv.agent_state = state;
+
+        const page = self.getTabPage() orelse return;
+
+        const icon_name: ?[:0]const u8 = switch (state) {
+            .none => null,
+            .idle => "media-playback-pause-symbolic",
+            .working => "media-playback-start-symbolic",
+            .blocked => "dialog-question-symbolic",
+            .done => "emblem-ok-symbolic",
+        };
+        if (icon_name) |name| {
+            const themed = gio.ThemedIcon.new(name.ptr);
+            defer _ = gobject.Object.unref(themed.as(gobject.Object));
+            page.setIndicatorIcon(themed.as(gio.Icon));
+        } else {
+            page.setIndicatorIcon(null);
+        }
+
+        // Pulse attention for the states a user should act on, but only
+        // on unselected tabs (matching the bell behavior above). Selection
+        // clears the pulse; the indicator icon stays.
+        if ((state == .blocked or state == .done) and
+            page.getSelected() == 0)
+        {
+            page.setNeedsAttention(@intFromBool(true));
+        }
     }
 
     /// Select the next tab page.
