@@ -2459,7 +2459,15 @@ pub const Surface = extern struct {
                 break :master pty.master;
             },
         };
-        const pgrp = std.posix.tcgetpgrp(master) catch return null;
+        // std.posix.tcgetpgrp doesn't compile against libc on this Zig
+        // (std.c lacks the declaration), so issue the ioctl directly.
+        var pgrp: std.posix.pid_t = 0;
+        const rc = std.os.linux.ioctl(
+            master,
+            std.os.linux.T.IOCGPGRP,
+            @intFromPtr(&pgrp),
+        );
+        if (std.os.linux.E.init(rc) != .SUCCESS) return null;
         if (pgrp <= 0) return null;
 
         var comm_buf: [64]u8 = undefined;
