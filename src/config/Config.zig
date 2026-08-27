@@ -538,9 +538,14 @@ language: ?[:0]const u8 = null,
 @"freetype-load-flags": FreetypeLoadFlags = .{},
 
 /// A theme to use. This can be a built-in theme name, a custom theme
-/// name, or an absolute path to a custom theme file. Ghostty also supports
-/// specifying a different theme to use for light and dark mode. Each
-/// option is documented below.
+/// name, or an absolute path to a custom theme file.
+///
+/// Ghostty also supports specifying a different theme to use for light and
+/// dark mode. Each option is documented below.
+///
+/// If no theme is set at all, Ghostty's built-in colors follow the light/dark
+/// preference of the desktop environment. Setting a single (non light/dark)
+/// theme opts out of that and uses the same colors for both.
 ///
 /// If the theme is an absolute pathname, Ghostty will attempt to load that
 /// file as a theme. If that file does not exist or is inaccessible, an error
@@ -594,10 +599,18 @@ theme: ?Theme = null,
 
 /// Background color for the window.
 /// Specified as either hex (`#RRGGBB` or `RRGGBB`) or a named X11 color.
+///
+/// If this is not set, the default follows the light/dark preference of the
+/// desktop environment: a light background on a light desktop and a dark
+/// background on a dark desktop. Setting this explicitly (or setting
+/// `theme`) opts out of that behavior.
 background: Color = .{ .r = 0x28, .g = 0x2C, .b = 0x34 },
 
 /// Foreground color for the window.
 /// Specified as either hex (`#RRGGBB` or `RRGGBB`) or a named X11 color.
+///
+/// Like `background`, the default follows the light/dark preference of the
+/// desktop environment.
 foreground: Color = .{ .r = 0xFF, .g = 0xFF, .b = 0xFF },
 
 /// Background image for the terminal.
@@ -2117,13 +2130,16 @@ keybind: Keybinds = .{},
 /// Available since: 1.1.0
 @"window-subtitle": WindowSubtitle = .false,
 
-/// The theme to use for the windows. Valid values:
+/// The theme to use for the windows. The default is `system`, which makes
+/// Ghostty follow the light/dark preference of the desktop environment.
+///
+/// Valid values:
 ///
 ///   * `auto` - Determine the theme based on the configured terminal
 ///      background color. This has no effect if the "theme" configuration
 ///      has separate light and dark themes. In that case, the behavior
 ///      of "auto" is equivalent to "system".
-///   * `system` - Use the system theme.
+///   * `system` - Use the system theme. This is the default.
 ///   * `light` - Use the light theme regardless of system theme.
 ///   * `dark` - Use the dark theme regardless of system theme.
 ///   * `ghostty` - Use the background and foreground colors specified in the
@@ -2135,7 +2151,7 @@ keybind: Keybinds = .{},
 /// non-terminal windows within Ghostty.
 ///
 /// This is currently only supported on macOS and Linux.
-@"window-theme": WindowTheme = .auto,
+@"window-theme": WindowTheme = .system,
 
 /// The color space to use when interpreting terminal colors. "Terminal colors"
 /// refers to colors specified in your configuration and colors produced by
@@ -3886,7 +3902,99 @@ pub fn default(alloc_gpa: Allocator) Allocator.Error!Config {
         .highlight = .{ .hover_mods = inputpkg.ctrlOrSuper(.{}) },
     });
 
+    // Our built-in colors follow the system color scheme.
+    result.applyColorSchemeDefaults();
+
     return result;
+}
+
+/// A small helper to write our built-in colors as hex literals.
+fn rgbHex(comptime hex: u24) Color {
+    return .{
+        .r = @truncate(hex >> 16),
+        .g = @truncate(hex >> 8),
+        .b = @truncate(hex),
+    };
+}
+
+/// The built-in terminal colors for a single system color scheme.
+const ColorSchemeDefaults = struct {
+    background: Color,
+    foreground: Color,
+
+    /// The first 16 (ANSI) palette colors. If this is null then the
+    /// terminal defaults are used. Palette colors above index 15 (the
+    /// 6x6x6 cube and the grayscale ramp) are color scheme independent
+    /// so they're never modified.
+    ansi: ?[16]Color = null,
+};
+
+/// The built-in colors used when the desktop environment prefers a dark
+/// color scheme. These are Ghostty's historical defaults.
+const dark_color_defaults: ColorSchemeDefaults = .{
+    .background = rgbHex(0x282c34),
+    .foreground = rgbHex(0xffffff),
+};
+
+/// The built-in colors used when the desktop environment prefers a light
+/// color scheme. These match the GNOME/Adwaita palette so that Ghostty
+/// looks at home next to other light-mode desktop applications.
+const light_color_defaults: ColorSchemeDefaults = .{
+    .background = rgbHex(0xffffff),
+    .foreground = rgbHex(0x1d1d20),
+    .ansi = .{
+        rgbHex(0x1d1d20),
+        rgbHex(0xc01c28),
+        rgbHex(0x26a269),
+        rgbHex(0xa2734c),
+        rgbHex(0x12488b),
+        rgbHex(0xa347ba),
+        rgbHex(0x2aa1b3),
+        rgbHex(0xcfcfcf),
+        rgbHex(0x5d5d5d),
+        rgbHex(0xf66151),
+        rgbHex(0x33d17a),
+        rgbHex(0xe9ad0c),
+        rgbHex(0x2a7bde),
+        rgbHex(0xc061cb),
+        rgbHex(0x33c7de),
+        rgbHex(0xffffff),
+    },
+};
+
+/// Reset our built-in colors to match the current conditional color
+/// scheme state (`_conditional_state.theme`).
+///
+/// Ghostty follows the light/dark preference of the desktop environment
+/// out of the box: without any configuration at all, a light desktop gets
+/// a light terminal and a dark desktop gets a dark terminal.
+///
+/// This must only ever be called on a configuration that hasn't loaded any
+/// user values yet, because these are *defaults*: user configuration is
+/// loaded (or replayed) on top of them and always wins.
+fn applyColorSchemeDefaults(self: *Config) void {
+    const defaults: ColorSchemeDefaults = switch (self._conditional_state.theme) {
+        .light => light_color_defaults,
+        .dark => dark_color_defaults,
+    };
+
+    self.background = defaults.background;
+    self.foreground = defaults.foreground;
+
+    // Note: we intentionally don't touch `palette.mask` because these
+    // aren't user-specified colors.
+    if (defaults.ansi) |ansi| {
+        for (ansi, 0..) |color, i| self.palette.value[i] = .{
+            .r = color.r,
+            .g = color.g,
+            .b = color.b,
+        };
+    } else {
+        @memcpy(
+            self.palette.value[0..16],
+            terminal.color.default[0..16],
+        );
+    }
 }
 
 /// Load configuration from an iterator that yields values that look like
@@ -4377,6 +4485,10 @@ pub fn changeConditionalState(
     // Set our conditional state so the replay below can use it
     new_config._conditional_state = new;
 
+    // Our built-in colors depend on the conditional state, so reset them
+    // before we replay the user configuration on top.
+    new_config.applyColorSchemeDefaults();
+
     // Replay all of our steps to rebuild the configuration
     var it = Replay.iterator(self._replay_steps.items, &new_config);
     try new_config.loadIter(alloc_gpa, &it);
@@ -4538,6 +4650,11 @@ pub fn finalize(self: *Config) !void {
             // Mark that we use a conditional theme
             self._conditional_set.insert(.theme);
         }
+    } else {
+        // Without an explicit theme our built-in colors still follow the
+        // system light/dark preference (see `applyColorSchemeDefaults`), so
+        // we always depend on the theme conditional.
+        self._conditional_set.insert(.theme);
     }
 
     const alloc = self._arena.?.allocator();
@@ -4935,6 +5052,7 @@ pub fn cloneEmpty(
 ) Allocator.Error!Config {
     var result = try default(alloc_gpa);
     result._conditional_state = self._conditional_state;
+    result.applyColorSchemeDefaults();
     return result;
 }
 
@@ -10634,6 +10752,58 @@ test "theme loading" {
 
     // Not a conditional theme
     try testing.expect(!cfg._conditional_set.contains(.theme));
+}
+
+test "default colors follow the system color scheme" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var cfg = try Config.default(alloc);
+    defer cfg.deinit();
+    try cfg.finalize();
+
+    // The conditional state defaults to light, so the built-in colors do
+    // too, and windows follow the system.
+    try testing.expectEqual(light_color_defaults.background, cfg.background);
+    try testing.expectEqual(light_color_defaults.foreground, cfg.foreground);
+    try testing.expectEqual(WindowTheme.system, cfg.@"window-theme");
+
+    // Without a theme we still depend on the theme conditional so that a
+    // light/dark switch reloads our colors.
+    try testing.expect(cfg._conditional_set.contains(.theme));
+
+    var dark = (try cfg.changeConditionalState(.{ .theme = .dark })).?;
+    defer dark.deinit();
+    try testing.expectEqual(dark_color_defaults.background, dark.background);
+    try testing.expectEqual(dark_color_defaults.foreground, dark.foreground);
+    try testing.expectEqual(terminal.color.default[1], dark.palette.value[1]);
+}
+
+test "configured colors survive a system color scheme change" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var cfg = try Config.default(alloc);
+    defer cfg.deinit();
+    var it: TestIterator = .{ .data = &.{
+        "--background=#112233",
+        "--palette=1=#445566",
+    } };
+    try cfg.loadIter(alloc, &it);
+    try cfg.finalize();
+
+    var dark = (try cfg.changeConditionalState(.{ .theme = .dark })).?;
+    defer dark.deinit();
+
+    // User colors always win over the built-in scheme defaults...
+    try testing.expectEqual(Color{ .r = 0x11, .g = 0x22, .b = 0x33 }, dark.background);
+    try testing.expectEqual(
+        terminal.color.RGB{ .r = 0x44, .g = 0x55, .b = 0x66 },
+        dark.palette.value[1],
+    );
+
+    // ...but colors they didn't set still follow the scheme.
+    try testing.expectEqual(dark_color_defaults.foreground, dark.foreground);
 }
 
 test "theme loading preserves conditional state" {

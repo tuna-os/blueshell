@@ -166,6 +166,70 @@ pub fn setKeyList(alloc: Allocator, key: []const u8, values: []const []const u8,
     log.info("config list write: {s} ({d} entries) -> {s}", .{ key, values.len, path });
 }
 
+/// Remove every assignment of `key` from the config file. Used when a
+/// setting is being replaced by another mechanism (e.g. direct color
+/// assignments being replaced by a `theme`).
+pub fn removeKey(alloc: Allocator, key: []const u8, maybe_path: ?[]const u8) !void {
+    const none: []const []const u8 = &.{};
+    try setKeyList(alloc, key, none, maybe_path);
+}
+
+/// Resolve the user's themes directory: the `themes` subdirectory of the
+/// Ghostty config directory, which is the first location Ghostty searches
+/// when resolving a `theme` by name.
+pub fn resolveThemesDir(alloc: Allocator) ![]const u8 {
+    const config_path = try resolveConfigPath(alloc);
+    defer alloc.free(config_path);
+    const dir = std.fs.path.dirname(config_path) orelse return error.NoConfigDir;
+    return try std.fs.path.join(alloc, &.{ dir, "themes" });
+}
+
+/// Write a Ghostty theme file named `name` (a plain file name, no path
+/// separators) into the user's themes directory. Any existing file with
+/// that name is replaced.
+pub fn writeTheme(
+    alloc: Allocator,
+    name: []const u8,
+    contents: []const u8,
+) !void {
+    if (std.mem.indexOfAny(u8, name, "/\\") != null) return error.InvalidThemeName;
+
+    const dir = try resolveThemesDir(alloc);
+    defer alloc.free(dir);
+    std.fs.makeDirAbsolute(dir) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => return err,
+    };
+
+    const path = try std.fs.path.join(alloc, &.{ dir, name });
+    defer alloc.free(path);
+
+    const tmp_path = try std.fmt.allocPrint(alloc, "{s}.tmp", .{path});
+    defer alloc.free(tmp_path);
+    {
+        const f = try std.fs.createFileAbsolute(tmp_path, .{ .truncate = true });
+        defer f.close();
+        try f.writeAll(contents);
+    }
+    try std.fs.renameAbsolute(tmp_path, path);
+
+    log.info("wrote theme: {s}", .{path});
+}
+
+/// Sanitize a palette id into something usable as a theme file name.
+/// Path separators and the characters that are meaningful in a
+/// `theme = light:...,dark:...` value are replaced with `-`.
+pub fn sanitizeThemeName(alloc: Allocator, name: []const u8) ![]u8 {
+    const out = try alloc.dupe(u8, name);
+    for (out) |*c| {
+        switch (c.*) {
+            '/', '\\', ':', ',', '=' => c.* = '-',
+            else => {},
+        }
+    }
+    return out;
+}
+
 /// Set or remove a keybinding like `keybind = bind_key=action`.
 /// If `action` is null, it removes any existing `keybind = bind_key=...` line.
 /// Otherwise, it replaces/adds `keybind = bind_key=action`.
@@ -374,6 +438,33 @@ test "config_bridge: setKeyList removes all then appends" {
         \\palette = 1=#bbbbbb
         \\
     , out);
+}
+
+test "config_bridge: removeKey drops every assignment" {
+    const alloc = std.testing.allocator;
+    var tf = try TestFile.init(alloc);
+    defer tf.deinit(alloc);
+
+    try tf.write(
+        \\background = #000000
+        \\font-family = X
+        \\background = #111111
+        \\
+    );
+    try removeKey(alloc, "background", tf.path);
+    const out = try tf.read(alloc);
+    defer alloc.free(out);
+    try std.testing.expectEqualStrings(
+        \\font-family = X
+        \\
+    , out);
+}
+
+test "config_bridge: sanitizeThemeName replaces separators" {
+    const alloc = std.testing.allocator;
+    const out = try sanitizeThemeName(alloc, "a/b:c,d=e f");
+    defer alloc.free(out);
+    try std.testing.expectEqualStrings("a-b-c-d-e f", out);
 }
 
 test "config_bridge: setKeybind adds, replaces, and removes" {

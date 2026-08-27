@@ -15,7 +15,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const apprt = @import("../../../apprt.zig");
 const palette_mod = @import("palette.zig");
+const Application = @import("application.zig").Application;
 const CoreSurface = @import("../../../Surface.zig");
 
 const log = std.log.scoped(.gtk_ptyxis_osc_palette);
@@ -45,10 +47,16 @@ pub fn buildApplySequences(alloc: Allocator, variant: *const palette_mod.Variant
     return try out.toOwnedSlice(alloc);
 }
 
-/// Pick the variant to apply, preferring dark (matches the preferences
-/// window's applyPaletteToPath behavior).
-pub fn preferredVariant(p: *const palette_mod.Palette) *const palette_mod.Variant {
-    return if (p.dark.background != null) &p.dark else &p.light;
+/// Pick the variant to apply for the given color scheme, falling back to
+/// the other variant for palettes that only define one.
+pub fn variantFor(
+    p: *const palette_mod.Palette,
+    scheme: apprt.ColorScheme,
+) *const palette_mod.Variant {
+    return switch (scheme) {
+        .light => if (p.light.background != null) &p.light else &p.dark,
+        .dark => if (p.dark.background != null) &p.dark else &p.light,
+    };
 }
 
 /// Apply the palette with the given id to a single surface.
@@ -65,7 +73,12 @@ pub fn applyToSurface(surface: *CoreSurface, id: []const u8) !void {
         return error.PaletteNotFound;
     };
 
-    const bytes = try buildApplySequences(alloc, preferredVariant(p));
+    // Match the color scheme the rest of the app is using so a
+    // per-surface palette looks right in both light and dark mode.
+    const bytes = try buildApplySequences(
+        alloc,
+        variantFor(p, Application.default().colorScheme()),
+    );
     // Ownership moves to the termio thread, which frees after parsing.
     surface.io.queueMessage(.{ .inject_output = .{
         .alloc = alloc,
