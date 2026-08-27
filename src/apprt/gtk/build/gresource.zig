@@ -231,6 +231,13 @@ const container_icons = [_][]const u8{
     "container-jhbuild-symbolic",
     "container-podman-symbolic",
     "container-toolbox-symbolic",
+    // Agent-state tab badges (RFC #22). Shipped in-resource so the
+    // badges render regardless of the system icon theme (modern Adwaita
+    // dropped several legacy names like dialog-question-symbolic).
+    "agent-working-symbolic",
+    "agent-idle-symbolic",
+    "agent-blocked-symbolic",
+    "agent-done-symbolic",
 };
 
 /// Generate the resources at the root prefix.

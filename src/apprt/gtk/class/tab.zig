@@ -519,12 +519,14 @@ pub const Tab = extern struct {
 
         const page = self.getTabPage() orelse return;
 
+        // These ship in our gresource (src/apprt/gtk/icons), so they
+        // resolve on any system regardless of the installed icon theme.
         const icon_name: ?[:0]const u8 = switch (state) {
             .none => null,
-            .idle => "media-playback-pause-symbolic",
-            .working => "media-playback-start-symbolic",
-            .blocked => "dialog-question-symbolic",
-            .done => "emblem-ok-symbolic",
+            .idle => "agent-idle-symbolic",
+            .working => "agent-working-symbolic",
+            .blocked => "agent-blocked-symbolic",
+            .done => "agent-done-symbolic",
         };
         if (icon_name) |name| {
             const themed = gio.ThemedIcon.new(name.ptr);
