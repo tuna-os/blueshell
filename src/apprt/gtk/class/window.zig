@@ -276,9 +276,10 @@ pub const Window = extern struct {
         menu_button_compact: *gtk.MenuButton,
         zoom_label: ?*gtk.Label = null,
         zoom_label_compact: ?*gtk.Label = null,
-        theme_follow: ?*gtk.CheckButton = null,
-        theme_light: ?*gtk.CheckButton = null,
-        theme_dark: ?*gtk.CheckButton = null,
+        /// The style selector lives in both the normal and the compact
+        /// header's menu, so we keep both groups and refresh them together.
+        /// Index 0 is the primary popover, 1 the compact one.
+        theme_selectors: [2]?ThemeSelector = .{ null, null },
 
         /// Set while we're updating the style selector to match the
         /// config so that the resulting "toggled" signals don't write
@@ -453,7 +454,15 @@ pub const Window = extern struct {
         addHamburgerChildren(self, priv.menu_button_compact, false);
     }
 
+    /// Display-wide stylesheet for the style selector. Installed once per
+    /// process — it used to be added per window, stacking an identical
+    /// provider on the display for every window that was opened.
+    var theme_selector_css_installed: bool = false;
+
     fn installThemeSelectorCSS(widget: *gtk.Widget) void {
+        if (theme_selector_css_installed) return;
+        theme_selector_css_installed = true;
+
         const css =
             \\.ptyxis-theme-selector checkbutton {
             \\  min-width: 44px;
@@ -465,7 +474,9 @@ pub const Window = extern struct {
             \\  margin: 6px;
             \\}
             \\.ptyxis-theme-selector checkbutton:checked {
-            \\  box-shadow: inset 0 0 0 2px @accent_bg_color;
+            \\  box-shadow:
+            \\    inset 0 0 0 3px @accent_bg_color,
+            \\    0 0 0 1px alpha(@accent_bg_color, 0.35);
             \\}
             \\.ptyxis-theme-selector checkbutton.follow {
             \\  background-image: linear-gradient(to bottom right, #fff 49.99%, #202020 50.01%);
@@ -476,20 +487,16 @@ pub const Window = extern struct {
             \\.ptyxis-theme-selector checkbutton.dark {
             \\  background-color: #202020;
             \\}
-            \\.ptyxis-theme-selector checkbutton radio {
+            \\.ptyxis-theme-selector checkbutton radio,
+            \\.ptyxis-theme-selector checkbutton check {
             \\  -gtk-icon-source: none;
             \\  border: none;
             \\  background: none;
             \\  box-shadow: none;
-            \\  min-width: 12px;
-            \\  min-height: 12px;
-            \\  padding: 2px;
-            \\}
-            \\.ptyxis-theme-selector checkbutton:checked radio {
-            \\  -gtk-icon-source: -gtk-icontheme("object-select-symbolic");
-            \\  background-color: @accent_bg_color;
-            \\  color: @accent_fg_color;
-            \\  border-radius: 9999px;
+            \\  min-width: 0;
+            \\  min-height: 0;
+            \\  margin: 0;
+            \\  padding: 0;
             \\}
             \\.ptyxis-zoom-row {
             \\  padding: 0 12px;
@@ -504,6 +511,13 @@ pub const Window = extern struct {
         );
         _ = gobject.Object.unref(provider.as(gobject.Object));
     }
+
+    /// One popover's style selector: the three grouped circles.
+    const ThemeSelector = struct {
+        follow: *gtk.CheckButton,
+        light: *gtk.CheckButton,
+        dark: *gtk.CheckButton,
+    };
 
     /// Build theme-selector and zoom-row and add them to `button`'s popover.
     /// `primary` = true for the headerbar button (stores refs for update).
@@ -541,15 +555,16 @@ pub const Window = extern struct {
         sel_box.append(light_btn.as(gtk.Widget));
         sel_box.append(dark_btn.as(gtk.Widget));
 
-        if (primary) {
-            priv.theme_follow = follow_btn;
-            priv.theme_light = light_btn;
-            priv.theme_dark = dark_btn;
-        }
+        const selector: ThemeSelector = .{
+            .follow = follow_btn,
+            .light = light_btn,
+            .dark = dark_btn,
+        };
+        priv.theme_selectors[if (primary) 0 else 1] = selector;
 
         // Set initial state BEFORE wiring signals so setActive() doesn't
         // trigger spurious config writes during init.
-        setThemeCheckButtons(self, follow_btn, light_btn, dark_btn);
+        setThemeSelector(self, selector);
 
         // Wire theme toggle signals (after initial state is set).
         _ = gobject.signalConnectData(follow_btn.as(gobject.Object), "toggled", @ptrCast(&themeFollowToggled), self, null, .{});
@@ -591,14 +606,8 @@ pub const Window = extern struct {
         _ = popover.addChild(zoom_box.as(gtk.Widget), "zoom-row");
     }
 
-    fn setThemeCheckButtons(
-        self: *Self,
-        follow: *gtk.CheckButton,
-        light: *gtk.CheckButton,
-        dark: *gtk.CheckButton,
-    ) void {
-        const app = Application.default();
-        const cfg = app.getConfig().get();
+    fn setThemeSelector(self: *Self, selector: ThemeSelector) void {
+        const cfg = Application.default().getConfig().get();
         const active_idx: usize = switch (cfg.@"window-theme") {
             .auto, .system => 0,
             .light => 1,
@@ -609,34 +618,71 @@ pub const Window = extern struct {
         priv.theme_syncing = true;
         defer priv.theme_syncing = false;
 
-        follow.setActive(if (active_idx == 0) 1 else 0);
-        light.setActive(if (active_idx == 1) 1 else 0);
-        dark.setActive(if (active_idx == 2) 1 else 0);
+        selector.follow.setActive(if (active_idx == 0) 1 else 0);
+        selector.light.setActive(if (active_idx == 1) 1 else 0);
+        selector.dark.setActive(if (active_idx == 2) 1 else 0);
     }
 
-    /// Write `window-theme` to the user's config and reload, unless we're
-    /// the ones who just set the button state.
-    fn setWindowTheme(self: *Self, btn: *gtk.CheckButton, value: [:0]const u8) void {
+    /// Point every style selector in this window at the current config.
+    /// Called whenever the config changes and whenever a menu opens, so the
+    /// selection can't drift from reality (another window, an edited config
+    /// file, or a reload that lands after the menu was last drawn).
+    fn syncThemeSelectors(self: *Self) void {
+        for (self.private().theme_selectors) |maybe| {
+            if (maybe) |selector| setThemeSelector(self, selector);
+        }
+    }
+
+    /// Apply and persist a style-picker choice, unless we're the ones who
+    /// just set the button state.
+    fn setWindowTheme(
+        self: *Self,
+        btn: *gtk.CheckButton,
+        theme: configpkg.Config.WindowTheme,
+    ) void {
         if (btn.getActive() == 0) return;
         if (self.private().theme_syncing) return;
+
+        const app = Application.default();
+
+        // Apply immediately so the click feels instant instead of waiting
+        // on the debounced reload below.
+        app.applyWindowTheme(theme, app.getConfig().get().background);
+
+        // Then persist it for the next launch. A failed write must not
+        // leave the picker claiming a style we didn't save, so put the
+        // buttons back the way the config says.
         const config_bridge = @import("config_bridge.zig");
-        config_bridge.setKey(std.heap.c_allocator, "window-theme", value, null) catch |err| {
-            log.warn("window-theme write: {s}", .{@errorName(err)});
+        config_bridge.setKey(
+            std.heap.c_allocator,
+            "window-theme",
+            @tagName(theme),
+            null,
+        ) catch |err| {
+            log.warn("window-theme write failed: {s}", .{@errorName(err)});
+            self.syncThemeSelectors();
+            app.applyWindowTheme(
+                app.getConfig().get().@"window-theme",
+                app.getConfig().get().background,
+            );
             return;
         };
-        Application.default().triggerReload();
+
+        // Quiet: the user asked for a style, not for a config reload, so
+        // this shouldn't raise the "Reloaded the configuration" toast.
+        app.triggerReloadOpts(.{ .quiet = true });
     }
 
     fn themeFollowToggled(btn: *gtk.CheckButton, self: *Self) callconv(.c) void {
-        self.setWindowTheme(btn, "system");
+        self.setWindowTheme(btn, .system);
     }
 
     fn themeLightToggled(btn: *gtk.CheckButton, self: *Self) callconv(.c) void {
-        self.setWindowTheme(btn, "light");
+        self.setWindowTheme(btn, .light);
     }
 
     fn themeDarkToggled(btn: *gtk.CheckButton, self: *Self) callconv(.c) void {
-        self.setWindowTheme(btn, "dark");
+        self.setWindowTheme(btn, .dark);
     }
 
     /// Setup our action map.
@@ -1397,10 +1443,16 @@ pub const Window = extern struct {
         const priv = self.private();
         if (priv.config) |config_obj| {
             const config = config_obj.get();
-            if (config.@"app-notifications".@"config-reload") {
+            if (config.@"app-notifications".@"config-reload" and
+                !Application.default().isQuietReload())
+            {
                 self.addToast(i18n._("Reloaded the configuration"));
             }
         }
+
+        // The style picker mirrors `window-theme`, so it has to follow the
+        // config rather than only refreshing when a menu happens to open.
+        self.syncThemeSelectors();
 
         self.syncAppearance();
     }
@@ -1486,15 +1538,8 @@ pub const Window = extern struct {
         self.syncActions();
 
         // Update zoom label and theme buttons to reflect current state.
-        const priv = self.private();
         updateZoomLabel(self);
-        if (priv.theme_follow) |follow| {
-            if (priv.theme_light) |light| {
-                if (priv.theme_dark) |dark| {
-                    setThemeCheckButtons(self, follow, light, dark);
-                }
-            }
-        }
+        self.syncThemeSelectors();
     }
 
     fn updateZoomLabel(self: *Self) void {
