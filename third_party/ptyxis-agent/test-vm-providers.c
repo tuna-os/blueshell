@@ -206,6 +206,32 @@ test_corral (void)
 }
 
 static void
+test_corral_json (void)
+{
+  g_autoptr(GPtrArray) containers = g_ptr_array_new_with_free_func (g_object_unref);
+  PtyxisIpcContainer *c;
+
+  write_shim ("corral",
+              "#!/bin/sh\n"
+              "case \"$*\" in\n"
+              "*ct*list*--json*) printf '%s' '[{\"name\":\"devbox\",\"status\":\"Running\"},{\"name\":\"old-ct\",\"status\":\"Stopped\"}]' ;;\n"
+              "*list*--json*)    printf '%s' '[{\"name\":\"web-vm\",\"backend\":\"local\",\"status\":\"Running\"},{\"name\":\"down\",\"backend\":\"kubevirt\",\"status\":\"Stopped\"}]' ;;\n"
+              "esac\n");
+
+  blueshell_vm_providers_add_corral (containers);
+
+  g_assert_cmpuint (containers->len, ==, 2);
+  c = find_container (containers, "corral-web-vm");
+  g_assert_nonnull (c);
+  g_assert_cmpstr (ptyxis_ipc_container_get_icon_name (c), ==, "computer-symbolic");
+  c = find_container (containers, "corral-ct-devbox");
+  g_assert_nonnull (c);
+  g_assert_cmpstr (ptyxis_ipc_container_get_icon_name (c), ==, "container-generic-symbolic");
+  g_assert_null (find_container (containers, "corral-down"));
+  g_assert_null (find_container (containers, "corral-ct-old-ct"));
+}
+
+static void
 test_enumerate_respects_env (void)
 {
   /* Only lima enabled: incus shim exists but must not be consulted. */
@@ -244,6 +270,7 @@ main (int    argc,
   g_test_add_func ("/vm-providers/kubernetes", test_kubernetes);
   g_test_add_func ("/vm-providers/kubevirt", test_kubevirt);
   g_test_add_func ("/vm-providers/corral", test_corral);
+  g_test_add_func ("/vm-providers/corral-json", test_corral_json);
   g_test_add_func ("/vm-providers/enumerate-env", test_enumerate_respects_env);
 
   return g_test_run ();
