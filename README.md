@@ -24,29 +24,35 @@ App ID: `org.tunaos.BlueShell`
 
 ## Installation
 
-### TunaOS Flatpak remote
-
-> Available once the [tuna-os promotion](docs/TUNA_OS_PROMOTION.md) lands;
-> until then use the nightly bundle below.
+### TunaOS Flatpak remote (recommended)
 
 ```sh
 flatpak remote-add --if-not-exists tuna-os https://tunaos.org/flatpak/tuna-os.flatpakrepo
 flatpak install tuna-os org.tunaos.BlueShell
 ```
 
-Updates then arrive through normal `flatpak update`. The app is listed on
-[tunaos.org](https://tunaos.org/) alongside the other TunaOS apps.
+Updates then arrive through normal `flatpak update`. Both x86_64 and aarch64
+are published, and every commit to `ptyxis-port` refreshes the remote. The app
+is listed on [tunaos.org](https://tunaos.org/) alongside the other TunaOS apps.
 
-### Flatpak — one-line install (nightly bundle)
+### Flatpak bundle — direct download
 
-CI builds a fresh Flatpak bundle on every commit to `ptyxis-port`. Install the latest:
+The same builds are attached to the rolling
+[`tip`](https://github.com/tuna-os/blueshell/releases/tag/tip) release, so
+these URLs always serve the newest `ptyxis-port` build:
 
 ```sh
-curl -L https://nightly.link/tuna-os/blueshell/workflows/ghostty-ptyxis/ptyxis-port/BlueShell.flatpak.zip \
-  -o BlueShell.flatpak.zip \
-  && unzip -o BlueShell.flatpak.zip \
-  && flatpak install --user --reinstall BlueShell.flatpak
+# x86_64
+curl -LO https://github.com/tuna-os/blueshell/releases/download/tip/blueshell-x86_64.flatpak
+flatpak install --user --reinstall blueshell-x86_64.flatpak
+
+# aarch64
+curl -LO https://github.com/tuna-os/blueshell/releases/download/tip/blueshell-aarch64.flatpak
+flatpak install --user --reinstall blueshell-aarch64.flatpak
 ```
+
+Bundles installed this way don't auto-update — re-run the commands, or use the
+remote above.
 
 ### Flatpak — build from source
 
