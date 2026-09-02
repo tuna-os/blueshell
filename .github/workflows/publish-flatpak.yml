@@ -17,7 +17,7 @@ name: Publish Flatpak
 on:
   push:
     branches: [ptyxis-port]
-    tags: ['v*']
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -169,7 +169,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: '*-bundle'
+          pattern: "*-bundle"
           merge-multiple: true
       - name: Upload to release
         env:
@@ -177,3 +177,61 @@ jobs:
         run: |
           gh release upload "${GITHUB_REF_NAME}" *.flatpak --clobber \
             --repo "${GITHUB_REPOSITORY}"
+
+  release-tip:
+    name: Refresh the rolling tip release
+    needs: publish
+    # Every ptyxis-port build becomes a downloadable release. Upstream's
+    # release-tip.yml is gated to ghostty-org and never runs here, so
+    # without this the repo has no releases at all and the only download
+    # is a workflow artifact that expires after 7 days.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/ptyxis-port'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: "*-bundle"
+          merge-multiple: true
+
+      - name: Publish the bundles as the `tip` prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # `tip` is a rolling pointer at the newest ptyxis-port build, so
+          # the download URLs stay stable while the contents move forward.
+          git tag -f tip "$GITHUB_SHA"
+          git push -f origin tip
+
+          notes="Rolling build of \`ptyxis-port\` at \`${GITHUB_SHA:0:7}\`.
+
+          Install the Flatpak bundle for your architecture:
+
+          \`\`\`sh
+          flatpak install --user --reinstall blueshell-x86_64.flatpak
+          \`\`\`
+
+          Or track the TunaOS remote, which serves this same build:
+
+          \`\`\`sh
+          flatpak remote-add --if-not-exists tuna-os https://tunaos.org/flatpak/tuna-os.flatpakrepo
+          flatpak install tuna-os org.tunaos.BlueShell
+          \`\`\`
+          "
+
+          if gh release view tip --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit tip --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --notes "$notes" --prerelease
+          else
+            gh release create tip --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --title "Tip (rolling)" \
+              --notes "$notes" --prerelease
+          fi
+
+          gh release upload tip ./*.flatpak --clobber \
+            --repo "$GITHUB_REPOSITORY"
