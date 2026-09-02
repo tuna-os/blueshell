@@ -50,7 +50,6 @@ pub const PreferencesWindow = extern struct {
         column_spacing_row: *adw.SpinRow,
         show_all_palettes_button: *gtk.Button,
         show_all_palettes_content: *adw.ButtonContent,
-        palette_scroll: *gtk.ScrolledWindow,
         palette_showing_all: bool = false,
         tab_position_row: *adw.ComboRow,
         use_system_font_switch: *gtk.Switch,
@@ -1322,21 +1321,30 @@ pub const PreferencesWindow = extern struct {
         "campbell",
         "dracula",
         "gnome",
-        "high-contrast",
+        // These three are matched (case-insensitively) against the
+        // `.palette` file names, so they have to be spelled the way the
+        // vendored collection spells them. They previously read
+        // "high-contrast", "solarized-dark" and "vs-code", matched
+        // nothing, and silently left the curated row three short.
+        "gnome-high-contrast",
         "horizon",
         "linux",
         "nord",
-        "solarized-dark",
+        "Solarized",
         "tango",
-        "vs-code",
+        "Vs Code",
         "xterm",
     };
 
-    fn isFeaturedPalette(id: []const u8) bool {
-        for (featured_palette_ids) |fid| {
-            if (std.ascii.eqlIgnoreCase(id, fid)) return true;
+    /// Index into `featured_palette_ids` that `id` names, if any. The
+    /// vendored collection contains names that differ only by case (two
+    /// distinct `Solarized` files, for instance), so callers use the index
+    /// to place each curated entry exactly once instead of twice.
+    fn featuredPaletteIndex(id: []const u8) ?usize {
+        for (featured_palette_ids, 0..) |fid, i| {
+            if (std.ascii.eqlIgnoreCase(id, fid)) return i;
         }
-        return false;
+        return null;
     }
 
     fn showAllPalettesClicked(_: *gtk.Button, self: *Self) callconv(.c) void {
@@ -1355,15 +1363,6 @@ pub const PreferencesWindow = extern struct {
         populatePalettes(self, priv.palette_showing_all) catch |err| {
             log.warn("populatePalettes failed: {s}", .{@errorName(err)});
         };
-
-        // Show-all: cap height + enable vscroll. Default: natural height, no scrollbar.
-        if (priv.palette_showing_all) {
-            priv.palette_scroll.setMaxContentHeight(480);
-            priv.palette_scroll.setPolicy(.never, .automatic);
-        } else {
-            priv.palette_scroll.setMaxContentHeight(-1);
-            priv.palette_scroll.setPolicy(.never, .never);
-        }
     }
 
     fn populatePalettes(self: *Self, show_all: bool) !void {
@@ -1380,8 +1379,13 @@ pub const PreferencesWindow = extern struct {
         try buildPaletteCSS(priv.palette_flowbox.as(gtk.Widget), palettes);
 
         var shown: usize = 0;
+        var featured_placed: std.StaticBitSet(featured_palette_ids.len) = .initEmpty();
         for (palettes, 0..) |p, idx| {
-            if (!show_all and !isFeaturedPalette(p.id)) continue;
+            if (!show_all) {
+                const fi = featuredPaletteIndex(p.id) orelse continue;
+                if (featured_placed.isSet(fi)) continue;
+                featured_placed.set(fi);
+            }
             const card = makePaletteCard(p, idx) orelse continue;
             priv.palette_flowbox.append(card.as(gtk.Widget));
             shown += 1;
@@ -1440,15 +1444,27 @@ pub const PreferencesWindow = extern struct {
         const css_z = try alloc.dupeZ(u8, css.items);
         defer alloc.free(css_z);
 
-        const provider = gtk.CssProvider.new();
+        // Reuse one display-wide provider. This used to add a fresh one on
+        // every call, and it is called on every "Show All / Show Fewer"
+        // toggle, so a ~1200-rule stylesheet (244 palettes) was being
+        // stacked on the display again and again — every stale copy still
+        // being matched against every widget on each style recalculation.
+        const display = gtk.Widget.getDisplay(widget);
+        const provider = palette_css_provider orelse provider: {
+            const p = gtk.CssProvider.new();
+            gtk.StyleContext.addProviderForDisplay(
+                display,
+                p.as(gtk.StyleProvider),
+                800,
+            );
+            palette_css_provider = p;
+            break :provider p;
+        };
         _ = provider.loadFromString(css_z.ptr);
-        gtk.StyleContext.addProviderForDisplay(
-            gtk.Widget.getDisplay(widget),
-            provider.as(gtk.StyleProvider),
-            800,
-        );
-        _ = gobject.Object.unref(provider.as(gobject.Object));
     }
+
+    /// The single palette stylesheet provider; see buildPaletteCSS.
+    var palette_css_provider: ?*gtk.CssProvider = null;
 
     /// Build a single Ptyxis-style palette swatch card. The shared
     /// stylesheet installed by buildPaletteCSS provides the colors via
@@ -1676,7 +1692,6 @@ pub const PreferencesWindow = extern struct {
             );
             class.bindTemplateChildPrivate("show_all_palettes_button", .{});
             class.bindTemplateChildPrivate("show_all_palettes_content", .{});
-            class.bindTemplateChildPrivate("palette_scroll", .{});
             class.bindTemplateChildPrivate("opacity_scale", .{});
             class.bindTemplateChildPrivate("palette_flowbox", .{});
             class.bindTemplateChildPrivate("cursor_shape_row", .{});
