@@ -261,6 +261,17 @@ pub const Application = extern struct {
         /// at 300ms collapses those into a single config reload.
         pending_reload_timer: c_uint = 0,
 
+        /// True while the in-flight config reload was initiated by us rather
+        /// than by the user (the style picker writing `window-theme`, or a
+        /// soft reload after a desktop light/dark switch). Windows read this
+        /// to skip the "Reloaded the configuration" toast, which should only
+        /// appear for reloads the user actually asked for. Set for the whole
+        /// reload — every window reads it — and recomputed on the next one.
+        quiet_reload: bool = false,
+
+        /// Requested by triggerReloadOpts, consumed by the reload it queued.
+        pending_quiet_reload: bool = false,
+
         pub var offset: c_int = 0;
     };
 
@@ -1658,12 +1669,26 @@ pub const Application = extern struct {
     /// apply without the user having to restart or hit "Reload Config".
     /// Repeated calls within the debounce window collapse to one reload.
     pub fn triggerReload(self: *Self) void {
+        self.triggerReloadOpts(.{});
+    }
+
+    /// `quiet` suppresses the config-reload toast for this reload; use it
+    /// for reloads the user didn't explicitly request.
+    pub fn triggerReloadOpts(self: *Self, opts: struct { quiet: bool = false }) void {
         const priv = self.private();
+        if (opts.quiet) priv.pending_quiet_reload = true;
         if (priv.pending_reload_timer != 0) {
             _ = glib.Source.remove(priv.pending_reload_timer);
             priv.pending_reload_timer = 0;
         }
         priv.pending_reload_timer = glib.timeoutAdd(300, &reloadFire, self);
+    }
+
+    /// Whether the config reload being applied right now was internal.
+    /// Windows use this to decide whether to show the reload toast; it is
+    /// a peek, not a take, because every window has to see the same answer.
+    pub fn isQuietReload(self: *Self) bool {
+        return self.private().quiet_reload;
     }
 
     fn reloadFire(data: ?*anyopaque) callconv(.c) c_int {
@@ -1742,10 +1767,23 @@ pub const Application = extern struct {
     /// requiring a restart.
     fn syncStyleManager(self: *Self) void {
         const config = self.private().config.get();
+        self.applyWindowTheme(config.@"window-theme", config.background);
+    }
+
+    /// Apply a `window-theme` value to the libadwaita style manager.
+    ///
+    /// The style picker calls this directly on click so the new style takes
+    /// effect immediately, rather than a few hundred milliseconds later when
+    /// the debounced config reload lands.
+    pub fn applyWindowTheme(
+        self: *Self,
+        theme: CoreConfig.WindowTheme,
+        background: CoreConfig.Color,
+    ) void {
         const style = self.as(adw.Application).getStyleManager();
-        style.setColorScheme(switch (config.@"window-theme") {
+        style.setColorScheme(switch (theme) {
             .auto, .ghostty => auto: {
-                const lum = config.background.toTerminalRGB().perceivedLuminance();
+                const lum = background.toTerminalRGB().perceivedLuminance();
                 break :auto if (lum > 0.5)
                     .prefer_light
                 else
@@ -2820,6 +2858,15 @@ const Action = struct {
 
         // When we exit this function tell systemd that reloading has finished.
         defer systemd.notify.ready();
+
+        // Decide once, for this whole reload, whether it was user-initiated.
+        // A soft reload is always internal (the desktop switched light/dark);
+        // a hard one is quiet only if whoever queued it asked for that.
+        {
+            const priv = self.private();
+            priv.quiet_reload = opts.soft or priv.pending_quiet_reload;
+            priv.pending_quiet_reload = false;
+        }
 
         // Get our config object.
         const config: *Config = config: {
