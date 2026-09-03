@@ -122,10 +122,10 @@ Being installable is not the finish line — the app must be discoverable:
 
 ## 5. Post-promotion checklist
 
-- [ ] `ptyxis-tests` and `ghostty-ptyxis` (bundle) workflows green in the org repo
-- [ ] `publish-flatpak` run pushed an image to `ghcr.io/tuna-os/blueshell` and the index PR/commit landed in `tuna-os/docs`
-- [ ] Fresh-machine install from the remote verified (`flatpak install tuna-os org.tunaos.BlueShell`)
-- [ ] README install section switched to the remote as the primary path (nightly.link bundle stays as the "bleeding edge" alternative)
+- [x] `ptyxis-tests` and `ghostty-ptyxis` (bundle) workflows green in the org repo
+- [x] `publish-flatpak` run pushed an image to `ghcr.io/tuna-os/blueshell` and the index PR/commit landed in `tuna-os/docs`
+- [x] Fresh-machine install from the remote verified (`flatpak install tuna-os org.tunaos.BlueShell`)
+- [x] README install section switched to the remote as the primary path (nightly.link bundle stays as the "bleeding edge" alternative)
 - [ ] tunaos.org apps page lists BlueShell with install command + screenshot (PR to `tuna-os/docs`)
 - [ ] `upstream-sync.yml` weekly run confirmed working under the org (issue/PR creation permissions)
-- [ ] Old repo redirect verified; announce the move in tunaOS channels
+- [x] Old repo redirect verified; announce the move in tunaOS channels

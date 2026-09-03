@@ -26,9 +26,6 @@ App ID: `org.tunaos.BlueShell`
 
 ### TunaOS Flatpak remote
 
-> Available once the [tuna-os promotion](docs/TUNA_OS_PROMOTION.md) lands;
-> until then use the nightly bundle below.
-
 ```sh
 flatpak remote-add --if-not-exists tuna-os https://tunaos.org/flatpak/tuna-os.flatpakrepo
 flatpak install tuna-os org.tunaos.BlueShell
