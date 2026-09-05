@@ -400,7 +400,7 @@ jobs:
           mv Ghostty.dmg blob/${GHOSTTY_VERSION}/Ghostty.dmg
           mv appcast.xml blob/${GHOSTTY_VERSION}/appcast-staged.xml
       - name: Upload to R2
-        uses: ryand56/r2-upload-action@61474c8f6a21b0dd8fc877a0b93c2c2078c88f60 # v1.5
+        uses: ryand56/r2-upload-action@33ebb7a494b3a8a3c5ed2ea6bbdc72e707090317 # v1.5
         with:
           r2-account-id: ${{ secrets.CF_R2_RELEASE_ACCOUNT_ID }}
           r2-access-key-id: ${{ secrets.CF_R2_RELEASE_AWS_KEY }}
