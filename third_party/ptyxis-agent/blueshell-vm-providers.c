@@ -371,12 +371,86 @@ blueshell_vm_providers_add_kubevirt (GPtrArray *containers)
     }
 }
 
-/* ---- Corral (tuna-os VM/CT manager): `corral list` + `corral ct list`.
- * No machine-readable list output yet upstream, so parse the table
- * tolerantly: skip the header row, first column is the name, and the
- * row must contain "running" (any case). VMs attach via `corral ssh`,
- * containers via `corral ct console` — both are console-style, so the
- * sh -c "$0" trick swallows the appended shell argv. ---- */
+/* ---- Corral (tuna-os VM/CT manager): `corral list --json` + `corral ct list --json`.
+ * Queries machine-readable JSON array when available; falls back to parsing
+ * the table output for older corral versions (skip header row, first column
+ * is name, row contains "running"). VMs attach via `corral ssh`, containers
+ * via `corral ct console` — both are console-style, so the sh -c "$0" trick
+ * swallows the appended shell argv. ---- */
+
+static gboolean
+add_corral_json (GPtrArray  *containers,
+                 const char *output,
+                 gboolean    is_ct)
+{
+  g_autoptr(JsonParser) parser = NULL;
+  JsonArray *arr;
+  guint len;
+
+  if (output == NULL || output[0] == '\0')
+    return FALSE;
+
+  parser = json_parser_new ();
+  if (!json_parser_load_from_data (parser, output, -1, NULL))
+    return FALSE;
+  if (json_parser_get_root (parser) == NULL ||
+      !JSON_NODE_HOLDS_ARRAY (json_parser_get_root (parser)))
+    return FALSE;
+
+  arr = json_node_get_array (json_parser_get_root (parser));
+  len = json_array_get_length (arr);
+
+  for (guint i = 0; i < len; i++)
+    {
+      JsonObject *obj = json_array_get_object_element (arr, i);
+      const char *name = NULL;
+      const char *status = NULL;
+      const char *phase = NULL;
+      gboolean is_running = FALSE;
+
+      if (obj == NULL || !json_object_has_member (obj, "name"))
+        continue;
+
+      name = json_object_get_string_member (obj, "name");
+      if (name == NULL || name[0] == '\0')
+        continue;
+
+      if (json_object_has_member (obj, "status"))
+        status = json_object_get_string_member (obj, "status");
+      if (json_object_has_member (obj, "phase"))
+        phase = json_object_get_string_member (obj, "phase");
+
+      if (status != NULL && g_ascii_strcasecmp (status, "running") == 0)
+        is_running = TRUE;
+      else if (phase != NULL && g_ascii_strcasecmp (phase, "running") == 0)
+        is_running = TRUE;
+      else if (json_object_has_member (obj, "running") &&
+               json_object_get_boolean_member (obj, "running"))
+        is_running = TRUE;
+
+      if (!is_running)
+        continue;
+
+      {
+        g_autofree char *id = g_strdup_printf ("corral-%s%s", is_ct ? "ct-" : "", name);
+
+        if (is_ct)
+          g_ptr_array_add (containers,
+                           make_container (id, "corral", name, "container-generic-symbolic",
+                                           (const char * const []) {
+                                             "sh", "-c", "exec corral ct console \"$0\"", name, NULL
+                                           }));
+        else
+          g_ptr_array_add (containers,
+                           make_container (id, "corral", name, "computer-symbolic",
+                                           (const char * const []) {
+                                             "sh", "-c", "exec corral ssh \"$0\"", name, NULL
+                                           }));
+      }
+    }
+
+  return TRUE;
+}
 
 static void
 add_corral_rows (GPtrArray  *containers,
@@ -430,14 +504,37 @@ add_corral_rows (GPtrArray  *containers,
     }
 }
 
+static void
+add_corral_entries (GPtrArray *containers,
+                    gboolean   is_ct)
+{
+  g_autofree char *out = NULL;
+
+  if (is_ct)
+    out = run_host_capture ((const char * const []) { "corral", "ct", "list", "--json", NULL });
+  else
+    out = run_host_capture ((const char * const []) { "corral", "list", "--json", NULL });
+
+  if (out != NULL && add_corral_json (containers, out, is_ct))
+    return;
+
+  /* If --json failed or produced non-JSON/empty output, retry with table fallback */
+  if (out == NULL || out[0] == '\0')
+    {
+      if (is_ct)
+        out = run_host_capture ((const char * const []) { "corral", "ct", "list", NULL });
+      else
+        out = run_host_capture ((const char * const []) { "corral", "list", NULL });
+    }
+
+  add_corral_rows (containers, out, is_ct);
+}
+
 void
 blueshell_vm_providers_add_corral (GPtrArray *containers)
 {
-  g_autofree char *vms = run_host_capture ((const char * const []) { "corral", "list", NULL });
-  g_autofree char *cts = run_host_capture ((const char * const []) { "corral", "ct", "list", NULL });
-
-  add_corral_rows (containers, vms, FALSE);
-  add_corral_rows (containers, cts, TRUE);
+  add_corral_entries (containers, FALSE);
+  add_corral_entries (containers, TRUE);
 }
 
 /* ---- Entry point ---- */
