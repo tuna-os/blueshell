@@ -115,17 +115,15 @@ Being installable is not the finish line — the app must be discoverable:
    (`02-prefs-appearance.png` shows the app best) and a link back to
    `tuna-os/blueshell`.
 
-2. **README install instructions**: the README's "TunaOS Flatpak
-   remote" section is already written (currently marked as pending
-   promotion) — remove the "available once…" note and promote it to
-   the recommended install path in the same PR that flips the app ID.
+2. **README install instructions**: ✅ DONE — the "available once…"
+   note is gone and the remote is the recommended path.
 
 ## 5. Post-promotion checklist
 
-- [ ] `ptyxis-tests` and `ghostty-ptyxis` (bundle) workflows green in the org repo
-- [ ] `publish-flatpak` run pushed an image to `ghcr.io/tuna-os/blueshell` and the index PR/commit landed in `tuna-os/docs`
+- [x] `ptyxis-tests` and `ghostty-ptyxis` (bundle) workflows green in the org repo
+- [x] `publish-flatpak` run pushed an image to `ghcr.io/tuna-os/blueshell` and the index PR/commit landed in `tuna-os/docs`
 - [ ] Fresh-machine install from the remote verified (`flatpak install tuna-os org.tunaos.BlueShell`)
-- [ ] README install section switched to the remote as the primary path (nightly.link bundle stays as the "bleeding edge" alternative)
+- [x] README install section switched to the remote as the primary path (the rolling `tip` release is the "bleeding edge" alternative)
 - [ ] tunaos.org apps page lists BlueShell with install command + screenshot (PR to `tuna-os/docs`)
 - [ ] `upstream-sync.yml` weekly run confirmed working under the org (issue/PR creation permissions)
 - [ ] Old repo redirect verified; announce the move in tunaOS channels
