@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.tunaos.BlueShell</id>
+  <name>BlueShell</name>
+  <summary>Container-native terminal powered by Ghostty</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT AND GPL-3.0-or-later</project_license>
+  <developer id="org.tunaos">
+    <name>TunaOS</name>
+  </developer>
+  <description>
+    <p>BlueShell combines Ghostty's rendering engine with a GNOME terminal interface and first-class support for Toolbox, Distrobox, and Podman containers.</p>
+  </description>
+  <launchable type="desktop-id">org.tunaos.BlueShell.desktop</launchable>
+  <url type="homepage">https://tunaos.org/blueshell</url>
+  <url type="bugtracker">https://github.com/tuna-os/blueshell/issues</url>
+  <categories>
+    <category>System</category>
+    <category>TerminalEmulator</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+</component>
