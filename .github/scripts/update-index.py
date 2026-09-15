@@ -53,7 +53,12 @@ def main():
     labels = config.get("config", {}).get("Labels", {})
 
     # 4. Validate required Flatpak labels
-    required_labels = ["org.flatpak.ref", "org.flatpak.metadata"]
+    required_labels = [
+        "org.flatpak.ref", "org.flatpak.metadata",
+        "org.freedesktop.appstream.appdata",
+        "org.freedesktop.appstream.icon-64",
+        "org.freedesktop.appstream.icon-128",
+    ]
     for label in required_labels:
         if label not in labels:
             raise ValueError(f"Missing required label: {label}")
@@ -76,7 +81,8 @@ def main():
         "Architecture": architecture,
         "Tags": args.tags,
         "Labels": {
-            k: v for k, v in labels.items() if k.startswith("org.flatpak.")
+            k: v for k, v in labels.items()
+            if k.startswith("org.flatpak.") or k.startswith("org.freedesktop.appstream.")
         }
     }
 
