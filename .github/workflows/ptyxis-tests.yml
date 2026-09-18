@@ -27,7 +27,7 @@ env:
 jobs:
   test:
     name: Unit + integration tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     # contents: write is only exercised by the screenshots-branch publish
     # step below, which runs on pushes to ptyxis-port (never on PRs).
