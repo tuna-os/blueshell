@@ -46,7 +46,15 @@ jobs:
         run: git remote add upstream https://github.com/ghostty-org/ghostty.git
 
       - name: Fetch upstream
-        run: git fetch upstream main --tags
+        run: |
+          # The fork keeps its own rolling `tip` tag (release-tip.yml) and
+          # upstream has an unrelated tag of the same name. A plain --tags
+          # fetch rejects it ("would clobber existing tag") and exits 1 even
+          # though upstream/main arrived fine — failing every sync run since
+          # the collision appeared. --force only affects this throwaway
+          # runner checkout (the workflow pushes only the sync branch, never
+          # tags).
+          git fetch upstream main --tags --force
 
       - name: Compute sync metadata
         id: meta
