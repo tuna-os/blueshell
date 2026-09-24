@@ -42,6 +42,15 @@ conflict, resolve using the recipe, and keep the file honest:
 - Drop a patch (e.g. it was upstreamed) → delete the entry in the same
   commit.
 
+`scripts/check-conflict-hotspots.sh` is the CI backstop for this: it
+diffs `HEAD` against the fork's base commit, restricted to the map's own
+declared scope (`src/**` plus `.gitignore`), and fails if that set
+disagrees with what the map's section headers list — either a modified
+file with no entry, or an entry for a file no longer modified. It
+caught two drifted entries (`src/build/docker/{debian,lib-c-docs}/Dockerfile`)
+on the same day it was added, so "keep the file honest" above is no
+longer only a process instruction.
+
 ### 3. Additions over modifications
 
 Fork code lives in **new files** wherever possible
