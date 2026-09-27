@@ -206,3 +206,10 @@ BlueShell uses Ghostty's standard config format at `~/.config/ghostty/config`. A
 - **BlueShell** ports Ptyxis's UI into Ghostty's GTK apprt as Zig
 
 License: GPL-3.0-or-later (matching both upstream projects)
+
+<!-- hive-contribute-plea: donated-compute appeal, keep in sync across repos -->
+## Contribute compute — no code needed
+
+No time to write code? You can still push this project's backlog forward. This repository is worked by a TunaOS AI-agent hive: lend the hive your AI subscription or API tokens and your machine runs contributor tasks from this project's backlog.
+
+- 🪸 [Contribute compute to the reef hive](https://reef.tunaos.org/contribute)
