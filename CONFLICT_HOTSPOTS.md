@@ -283,6 +283,41 @@ re-exports.
 
 ---
 
+## `src/build/docker/debian/Dockerfile` — LOW risk
+
+**What we added:** checksum verification of the downloaded Zig
+toolchain tarball (blueshell#41, mirroring the org's checksum-verified
+rclone pattern) — a per-architecture `sha256sum -c` against a pinned
+digest before extraction, replacing an unauthenticated `curl` + `tar`.
+
+**Why it can break:** upstream bumping the pinned Zig version (via
+`build.zig.zon`'s `minimum_zig_version`) needs a matching digest update
+here, or the build fails closed on a checksum mismatch — which is the
+intended failure mode, not a bug, but it does mean this file's patch
+must track upstream's version bumps rather than only its own edits to
+the Dockerfile.
+
+**Resolution recipe:** re-add the `case`/checksum block after the
+`ZIG_VERSION` extraction, keep `curl -fsSL` (fail-closed, silent) in
+place of upstream's bare `curl -L`, and update the `x86_64`/`aarch64`
+SHA-256 pins if upstream's Zig version changed.
+
+---
+
+## `src/build/docker/lib-c-docs/Dockerfile` — LOW risk
+
+**What we added:** digest-pin the `archlinux:latest` base image
+(blueshell#28) — `archlinux` is a rolling release, so a mutable tag lets
+the same commit here build a different image on every run, and a bad
+`:latest` push would silently change what ships.
+
+**Resolution recipe:** re-add the `@sha256:...` digest pin on the
+`FROM --platform=linux/amd64 archlinux ...` line. Bumping the pin
+deliberately (not `:latest` back) is the point when a refresh is
+needed.
+
+---
+
 ## `.gitignore` — LOW risk
 
 **What we added:** `zig-pkg/` to keep the vendored package cache out
@@ -294,6 +329,7 @@ of commits.
 
 - `src/main.zig`
 - `src/build.zig`
+
 - Anything in `src/terminal/`, `src/font/`, `src/renderer/`
 - `src/input/`
 
