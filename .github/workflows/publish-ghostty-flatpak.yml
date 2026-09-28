@@ -30,7 +30,7 @@ on:
   workflow_dispatch:
     inputs:
       source-ref:
-        description: 'Ghostty ref to build (branch, tag or SHA). Empty = ghostty-org/ghostty default branch.'
+        description: 'Ghostty ref to build (branch, tag or SHA). Empty = the pinned known-good ref (vars.GHOSTTY_SOURCE_REF, else the fallback in this file).'
         required: false
         type: string
         default: ''
@@ -57,7 +57,20 @@ jobs:
       # missing one.
       repo-name: tuna-os/ghostty
       source-repo: ghostty-org/ghostty
-      source-ref: ${{ inputs.source-ref }}
+      # Never "whatever upstream main is this Sunday". The 2026-09-20 run
+      # built main at 27e8b3f, right after upstream replaced GtkGLArea with
+      # direct EGL/dmabuf rendering. On Mesa's software renderer (every VM
+      # without GPU passthrough, including Utah's install e2e) that surface
+      # never initialises ("ZINK: failed to choose pdev", then
+      # "gtk_ghostty_surface: failed to initialize surface
+      # err=error.NotInitialized"): no window at all. Utah's post-testing e2e
+      # went red on every flavor.
+      #
+      # So the scheduled run builds a pinned, known-good upstream commit. Bump
+      # it deliberately (repo variable GHOSTTY_SOURCE_REF, no PR needed) after
+      # checking the build in a VM. ef7edc4 is upstream main from
+      # 2026-09-13, which Utah's e2e passed with. A dispatch input still wins.
+      source-ref: ${{ inputs.source-ref || vars.GHOSTTY_SOURCE_REF || 'ef7edc4a24cf3ef0d6862276602e09f7b4b11b40' }}
       # No bundles on the GitHub release: these are upstream's builds, and
       # this repo's releases are BlueShell's.
       attach-bundles: false
