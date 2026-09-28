@@ -142,7 +142,7 @@ jobs:
             index-repo
           # Header-based auth so the token never lands in the remote URL.
           git -C index-repo config --local http.extraheader \
-            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FLATPAK_INDEX_TOKEN" | base64)"
+            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FLATPAK_INDEX_TOKEN" | base64 -w0)"
           for arch in x86_64 aarch64; do
             python3 .github/scripts/update-index.py \
               --oci-dir "blueshell-${arch}.oci" \
