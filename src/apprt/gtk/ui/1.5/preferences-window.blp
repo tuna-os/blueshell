@@ -34,23 +34,22 @@ template $GhosttyPtyxisPreferencesWindow: Adw.PreferencesWindow {
         }
       }
 
-      ScrolledWindow palette_scroll {
-        hscrollbar-policy: never;
-        vscrollbar-policy: never;
-        propagate-natural-height: true;
-
-        FlowBox palette_flowbox {
-          column-spacing: 9;
-          row-spacing: 9;
-          min-children-per-line: 3;
-          max-children-per-line: 3;
-          selection-mode: none;
-          homogeneous: true;
-          margin-top: 6;
-          margin-bottom: 6;
-          margin-start: 6;
-          margin-end: 6;
-        }
+      // The flow box sits directly in the group: an AdwPreferencesPage is
+      // already a scroller, and nesting another one here collapsed the
+      // expanded list to a single clipped row (the inner scroller gets its
+      // minimum height, not its natural one) and trapped the scroll wheel.
+      // Letting the group grow lets the page scroll it normally.
+      FlowBox palette_flowbox {
+        column-spacing: 9;
+        row-spacing: 9;
+        min-children-per-line: 3;
+        max-children-per-line: 3;
+        selection-mode: none;
+        homogeneous: true;
+        margin-top: 6;
+        margin-bottom: 6;
+        margin-start: 6;
+        margin-end: 6;
       }
     }
 

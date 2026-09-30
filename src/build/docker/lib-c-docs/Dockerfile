@@ -1,7 +1,10 @@
 #--------------------------------------------------------------------
 # Generate documentation with Doxygen
 #--------------------------------------------------------------------
-FROM --platform=linux/amd64 archlinux:latest AS builder
+# Base images are digest-pinned (blueshell#28): archlinux is a rolling
+# release and nginx:alpine floats — mutable refs make the same commit build
+# different images and let a bad :latest push silently change what ships.
+FROM --platform=linux/amd64 archlinux@sha256:374011da98ed9bef569a91a00b6466a071414049c10054ae27e62a75615b7e8e AS builder
 
 # Build argument for noindex header
 ARG ADD_NOINDEX_HEADER=false
@@ -23,7 +26,7 @@ RUN doxygen
 #--------------------------------------------------------------------
 # Host the static HTML
 #--------------------------------------------------------------------
-FROM nginx:alpine AS runtime
+FROM nginx@sha256:988dc6ba913b85fe049a5d06452fe8766c4abda44a06614f47458ff4579330fd AS runtime
 
 # Pass build arg to runtime stage
 ARG ADD_NOINDEX_HEADER=false

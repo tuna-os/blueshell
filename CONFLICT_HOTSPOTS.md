@@ -7,6 +7,12 @@ of these files, this is your map.
 If a file isn't listed here, our changes there are additions in new
 locations and conflict only by coincidence — read the diff.
 
+**Scope.** This map covers upstream files under `src/`, plus
+`.gitignore`. The fork also patches twelve upstream workflows under
+`.github/workflows/` and two upstream docs (`README.md`, `HACKING.md`);
+those conflict on rebase like anything else, and whether they belong in
+this map is an open question — see issue #55.
+
 When upstreaming a hotspot makes a downstream patch unnecessary
 (issue #6 is the canonical example), delete the entry from this file
 in the same commit that drops the patch.
@@ -191,6 +197,92 @@ parser-injection message is broadly useful for embedders.
 
 ---
 
+## `src/config/Config.zig` + `src/config.zig` — HIGH risk
+
+**What we added:**
+
+- `@"exit-action": ExitAction = .close` and the `ExitAction` enum, plus
+  the `pub const ExitAction = Config.ExitAction;` re-export in
+  `src/config.zig`.
+- `@"agent-detect": RepeatableString`, `@"agent-notify": bool`,
+  `@"agent-colors": bool` — the RFC #22 agent-awareness options.
+- **A changed upstream default:** `@"window-theme"` was `.auto`, we ship
+  `.system`, together with the rewritten doc comment above it.
+
+**Why it can break:** `Config.zig` is upstream's central config struct
+and one of the files upstream edits most often. Worse, the
+`window-theme` patch is a *modification*, not an addition: a rebase can
+drop it without producing a conflict at all. Upstream keeps `.auto`,
+our line is gone, nothing fails, and the app silently stops following
+the desktop light/dark preference.
+
+**Resolution recipe:** the three additions are order-insensitive struct
+fields — re-add them anywhere in the field list, keeping the doc
+comments. Then explicitly re-check `@"window-theme"`: it must read
+`.system`. Verify with `grep -n 'window-theme' src/config/Config.zig`
+after every rebase, whether or not the file conflicted.
+
+---
+
+## `src/termio/shell_integration.zig` — HIGH risk
+
+**What we added:** a `host_resource_dir: ?[]const u8` parameter on the
+public `setup()` signature, threaded into `setupBash` as a non-optional
+`host_resource_dir: []const u8`. Inside `setupBash`, the in-sandbox
+`resource_dir` is used for the file-existence check and
+`host_resource_dir` for the `ENV` value — a Flatpak-only split, because
+the subprocess may run outside the sandbox and needs a host-accessible
+path. The two upstream tests in this file gained a trailing `null`
+argument.
+
+**Why it can break:** we changed a public function's parameter list, so
+every upstream call site of `setup()` is a patch of ours too. Any
+upstream change to `setup()`, `setupBash`, or the resource-dir plumbing
+collides.
+
+**Resolution recipe:** re-add the optional parameter last on `setup()`,
+pass `host_resource_dir orelse resource_dir` down to `setupBash`, and
+keep the check-path/env-path split inside it. Fix up upstream call
+sites and the two in-file tests with `null`.
+
+**Upstreaming:** a sandbox-aware resource dir is not BlueShell-specific
+— Ghostty's own Flatpak build has the same problem. Worth an upstream
+issue.
+
+---
+
+## `src/apprt/gtk/class/tab.zig` + `src/apprt/gtk/ui/1.5/tab.blp` — MEDIUM risk
+
+**What we added:**
+
+- A `title-prefix` property on `Tab` (Ptyxis-style, e.g. a container
+  name followed by " · "), prepended to the computed title unless a
+  title override is set.
+- The agent-state badge: per-tab idle / working / blocked / done
+  indicator, its icons, and the needs-attention pulse (RFC #22).
+- `tab.blp` threads `template.title-prefix` into the `computed_title`
+  bind expression's argument list.
+
+**Why it can break:** upstream reshapes `computed_title` or its bind
+arguments; the `.blp` bind list is positional, so an upstream argument
+added or removed silently changes what our prefix binds to.
+
+**Resolution recipe:** re-add the property and the badge, then check
+the `computed_title` bind in `tab.blp` argument by argument against the
+Zig signature — a mismatch here compiles and fails at runtime.
+
+---
+
+## `src/apprt/gtk/class.zig` — LOW risk
+
+**What we added:** one re-export line,
+`pub const ContainerClient = @import("class/container_client.zig").Client;`
+
+**Resolution recipe:** re-add the line next to the other class
+re-exports.
+
+---
+
 ## `.gitignore` — LOW risk
 
 **What we added:** `zig-pkg/` to keep the vendored package cache out
@@ -203,8 +295,12 @@ of commits.
 - `src/main.zig`
 - `src/build.zig`
 - Anything in `src/terminal/`, `src/font/`, `src/renderer/`
-- Anything in `src/config/` (we read it, never modify)
 - `src/input/`
+
+`src/config/` used to be on this list. It is not true and has not been
+since `40068cc` — see the `Config.zig` hotspot above. The entry is kept
+here as a note rather than deleted silently, because a resolver who
+remembers the old rule needs to be told it changed.
 
 If upstream-sync produces conflicts in any of those, something is
 wrong — either an accidental edit, or upstream refactored a callee we

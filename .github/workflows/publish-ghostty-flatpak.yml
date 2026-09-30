@@ -1,0 +1,64 @@
+name: Publish Ghostty Flatpak
+
+# Republish stock upstream Ghostty (com.mitchellh.ghostty) onto the TunaOS
+# Flatpak remote, alongside BlueShell. No TunaOS patches: the app is built
+# from a clean checkout of ghostty-org/ghostty using *upstream's own*
+# manifest, dependencies.yml and zig-packages.json, so upstream dependency
+# and runtime bumps need no change in this repo.
+#
+# Because the app IDs differ (com.mitchellh.ghostty vs org.tunaos.BlueShell),
+# a user can install both side by side from the one remote.
+#
+# This lives in blueshell rather than in a tuna-os/ghostty fork because a
+# fork would be a repo whose only original content is this file, with a
+# second FLATPAK_INDEX_TOKEN to provision and an upstream-sync mechanism to
+# maintain. The registry path and index entry are still ghostty's own
+# (tuna-os/ghostty), separate from blueshell's.
+#
+# The body is the canonical tuna-os pipeline in tuna-os/.github, the same
+# reusable workflow finupdate, mariner, mandelbrot, dualcut and the four
+# installer frontends call. This file is only the trigger policy.
+
+on:
+  schedule:
+    # Sundays 05:00 UTC. Weekly rather than daily because the reusable
+    # pipeline has no "upstream unchanged" short-circuit -- every run is two
+    # full Zig builds (x86_64 + aarch64, ~11 min each), and a republished
+    # upstream terminal does not need same-day freshness. Dispatch the
+    # workflow to pull in a specific upstream commit sooner.
+    - cron: '0 5 * * 0'
+  workflow_dispatch:
+    inputs:
+      source-ref:
+        description: 'Ghostty ref to build (branch, tag or SHA). Empty = ghostty-org/ghostty default branch.'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    # Forks don't publish. A fork running this on dispatch would push to its
+    # own ghcr namespace, and -- if it also carried FLATPAK_INDEX_TOKEN --
+    # would write an image nobody in the org built into the shared index.
+    if: github.repository == 'tuna-os/blueshell'
+    uses: tuna-os/.github/.github/workflows/publish-flatpak.yml@main
+    with:
+      app-id: com.mitchellh.ghostty
+      manifest-path: flatpak/com.mitchellh.ghostty.yml
+      # Registry path and central-index entry, deliberately not this repo:
+      # ghcr.io/tuna-os/ghostty, so it doesn't collide with blueshell's own
+      # entry. The package is created under the org by this repo's
+      # GITHUB_TOKEN and must be made public once, by hand, after the first
+      # successful run -- a private package fails to install exactly like a
+      # missing one.
+      repo-name: tuna-os/ghostty
+      source-repo: ghostty-org/ghostty
+      source-ref: ${{ inputs.source-ref }}
+      # No bundles on the GitHub release: these are upstream's builds, and
+      # this repo's releases are BlueShell's.
+      attach-bundles: false
+    secrets: inherit

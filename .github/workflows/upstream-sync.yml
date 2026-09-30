@@ -46,7 +46,15 @@ jobs:
         run: git remote add upstream https://github.com/ghostty-org/ghostty.git
 
       - name: Fetch upstream
-        run: git fetch upstream main --tags
+        run: |
+          # The fork keeps its own rolling `tip` tag (release-tip.yml) and
+          # upstream has an unrelated tag of the same name. A plain --tags
+          # fetch rejects it ("would clobber existing tag") and exits 1 even
+          # though upstream/main arrived fine — failing every sync run since
+          # the collision appeared. --force only affects this throwaway
+          # runner checkout (the workflow pushes only the sync branch, never
+          # tags).
+          git fetch upstream main --tags --force
 
       - name: Compute sync metadata
         id: meta
@@ -64,14 +72,33 @@ jobs:
           echo "date=${date}"                      >> "$GITHUB_OUTPUT"
           echo "branch=${branch}"                  >> "$GITHUB_OUTPUT"
 
-      - name: Short-circuit if already up to date
+      - name: Short-circuit if already up to date or a sync is in flight
         id: uptodate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ "$(git rev-parse HEAD)" = "${{ steps.meta.outputs.upstream_sha }}" ]; then
+          # `HEAD == upstream_sha` can never be true here: ptyxis-port is
+          # upstream plus our patch set, so its tip is by definition not
+          # upstream's tip. The question is whether upstream's HEAD is
+          # already *contained* in ours.
+          if git merge-base --is-ancestor \
+               "${{ steps.meta.outputs.upstream_sha }}" HEAD; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ptyxis-port already contains upstream ${{ steps.meta.outputs.upstream_short }}."
+            exit 0
           fi
+          # Don't stack sync branches. If the previous sync PR hasn't been
+          # dealt with, a second one covers an overlapping commit range and
+          # the two conflict with each other rather than with upstream.
+          open_sync=$(gh pr list --state open --base ptyxis-port \
+            --json headRefName \
+            --jq '[.[] | select(.headRefName | startswith("upstream-sync/"))] | length')
+          if [ "${open_sync}" != "0" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::An upstream-sync PR is already open — skipping this run. Merge or close it to resume."
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Attempt rebase
         id: rebase
@@ -166,5 +193,5 @@ jobs:
           echo "## upstream-sync result" >> "$GITHUB_STEP_SUMMARY"
           echo "- date: ${{ steps.meta.outputs.date }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- upstream: ${{ steps.meta.outputs.upstream_short }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- already up to date: ${{ steps.uptodate.outputs.skip }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- skipped (up to date, or a sync PR is already open): ${{ steps.uptodate.outputs.skip }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- clean rebase: ${{ steps.rebase.outputs.clean }}" >> "$GITHUB_STEP_SUMMARY"
