@@ -62,12 +62,35 @@ flatpak-builder --install --user build-dir flatpak/org.tunaos.BlueShell.yml
 
 ### Build from source
 
-Requires Zig 0.15.x and the GTK/Libadwaita development stack. On Fedora 43+:
+Requires Zig 0.15.x and the GTK/Libadwaita development stack.
+
+**Fedora 43+:**
 
 ```sh
-# Inside a toolbox or on the host:
 sudo dnf install blueprint-compiler gtk4-layer-shell-devel libadwaita-devel meson
+```
 
+**Ubuntu 24.04 / Debian (bookworm+):**
+
+```sh
+sudo apt-get install blueprint-compiler libgtk-4-dev libadwaita-1-dev libgtk4-layer-shell-dev meson
+```
+
+**Arch Linux:**
+
+```sh
+sudo pacman -S blueprint-compiler gtk4 libadwaita meson gtk4-layer-shell
+```
+
+**openSUSE Tumbleweed:**
+
+```sh
+sudo zypper install blueprint-compiler gtk4-devel libadwaita-devel meson gtk4-layer-shell-devel
+```
+
+**Build the app (all distributions):**
+
+```sh
 # Download Zig 0.15.x from https://ziglang.org/download/ and put on PATH
 
 git clone https://github.com/tuna-os/blueshell
