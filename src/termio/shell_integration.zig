@@ -437,7 +437,7 @@ test "bash" {
     var env = EnvMap.init(alloc);
     defer env.deinit();
 
-    const command = try setupBash(alloc, .{ .shell = "bash" }, res.path, &env);
+    const command = try setupBash(alloc, .{ .shell = "bash" }, res.path, res.path, &env);
     try testing.expectEqualStrings("bash --posix", command.?.shell);
     try testing.expectEqualStrings("1", env.get("GHOSTTY_BASH_INJECT").?);
 
@@ -469,7 +469,7 @@ test "bash: unsupported options" {
         var env = EnvMap.init(alloc);
         defer env.deinit();
 
-        try testing.expect(try setupBash(alloc, .{ .shell = cmdline }, res.path, &env) == null);
+        try testing.expect(try setupBash(alloc, .{ .shell = cmdline }, res.path, res.path, &env) == null);
         try testing.expectEqual(0, env.count());
     }
 }
@@ -488,7 +488,7 @@ test "bash: inject flags" {
         var env = EnvMap.init(alloc);
         defer env.deinit();
 
-        const command = try setupBash(alloc, .{ .shell = "bash --norc" }, res.path, &env);
+        const command = try setupBash(alloc, .{ .shell = "bash --norc" }, res.path, res.path, &env);
         try testing.expectEqualStrings("bash --posix", command.?.shell);
         try testing.expectEqualStrings("1 --norc", env.get("GHOSTTY_BASH_INJECT").?);
     }
@@ -498,7 +498,7 @@ test "bash: inject flags" {
         var env = EnvMap.init(alloc);
         defer env.deinit();
 
-        const command = try setupBash(alloc, .{ .shell = "bash --noprofile" }, res.path, &env);
+        const command = try setupBash(alloc, .{ .shell = "bash --noprofile" }, res.path, res.path, &env);
         try testing.expectEqualStrings("bash --posix", command.?.shell);
         try testing.expectEqualStrings("1 --noprofile", env.get("GHOSTTY_BASH_INJECT").?);
     }
@@ -518,14 +518,14 @@ test "bash: rcfile" {
 
     // bash --rcfile
     {
-        const command = try setupBash(alloc, .{ .shell = "bash --rcfile profile.sh" }, res.path, &env);
+        const command = try setupBash(alloc, .{ .shell = "bash --rcfile profile.sh" }, res.path, res.path, &env);
         try testing.expectEqualStrings("bash --posix", command.?.shell);
         try testing.expectEqualStrings("profile.sh", env.get("GHOSTTY_BASH_RCFILE").?);
     }
 
     // bash --init-file
     {
-        const command = try setupBash(alloc, .{ .shell = "bash --init-file profile.sh" }, res.path, &env);
+        const command = try setupBash(alloc, .{ .shell = "bash --init-file profile.sh" }, res.path, res.path, &env);
         try testing.expectEqualStrings("bash --posix", command.?.shell);
         try testing.expectEqualStrings("profile.sh", env.get("GHOSTTY_BASH_RCFILE").?);
     }
@@ -545,7 +545,7 @@ test "bash: HISTFILE" {
         var env = EnvMap.init(alloc);
         defer env.deinit();
 
-        _ = try setupBash(alloc, .{ .shell = "bash" }, res.path, &env);
+        _ = try setupBash(alloc, .{ .shell = "bash" }, res.path, res.path, &env);
         try testing.expect(std.mem.endsWith(u8, env.get("HISTFILE").?, ".bash_history"));
         try testing.expectEqualStrings("1", env.get("GHOSTTY_BASH_UNEXPORT_HISTFILE").?);
     }
@@ -557,7 +557,7 @@ test "bash: HISTFILE" {
 
         try env.put("HISTFILE", "my_history");
 
-        _ = try setupBash(alloc, .{ .shell = "bash" }, res.path, &env);
+        _ = try setupBash(alloc, .{ .shell = "bash" }, res.path, res.path, &env);
         try testing.expectEqualStrings("my_history", env.get("HISTFILE").?);
         try testing.expect(env.get("GHOSTTY_BASH_UNEXPORT_HISTFILE") == null);
     }
@@ -577,7 +577,7 @@ test "bash: ENV" {
 
     try env.put("ENV", "env.sh");
 
-    _ = try setupBash(alloc, .{ .shell = "bash" }, res.path, &env);
+    _ = try setupBash(alloc, .{ .shell = "bash" }, res.path, res.path, &env);
     try testing.expectEqualStrings("env.sh", env.get("GHOSTTY_BASH_ENV").?);
 
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
@@ -601,13 +601,13 @@ test "bash: additional arguments" {
 
     // "-" argument separator
     {
-        const command = try setupBash(alloc, .{ .shell = "bash - --arg file1 file2" }, res.path, &env);
+        const command = try setupBash(alloc, .{ .shell = "bash - --arg file1 file2" }, res.path, res.path, &env);
         try testing.expectEqualStrings("bash --posix - --arg file1 file2", command.?.shell);
     }
 
     // "--" argument separator
     {
-        const command = try setupBash(alloc, .{ .shell = "bash -- --arg file1 file2" }, res.path, &env);
+        const command = try setupBash(alloc, .{ .shell = "bash -- --arg file1 file2" }, res.path, res.path, &env);
         try testing.expectEqualStrings("bash --posix -- --arg file1 file2", command.?.shell);
     }
 }
@@ -627,7 +627,7 @@ test "bash: missing resources" {
     var env = EnvMap.init(alloc);
     defer env.deinit();
 
-    try testing.expect(try setupBash(alloc, .{ .shell = "bash" }, resources_dir, &env) == null);
+    try testing.expect(try setupBash(alloc, .{ .shell = "bash" }, resources_dir, resources_dir, &env) == null);
     try testing.expectEqual(0, env.count());
 }
 
