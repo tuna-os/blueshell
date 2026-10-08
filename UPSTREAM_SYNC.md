@@ -123,3 +123,26 @@ flatpak-builder resolves the branch as manifest `branch:` →
 `--default-branch` → manifest `default-branch:`, and
 `flatpak-github-actions` always passes `--default-branch=master`. Keep
 that in mind before moving the build off that action.
+
+---
+
+## The Second Upstream — `third_party/ptyxis-agent`
+
+BlueShell vendors the host-side container/VM agent from upstream Ptyxis
+(`https://gitlab.gnome.org/chergert/ptyxis.git`, `agent/` directory).
+Unlike Ghostty which is rebased via git on `ptyxis-port`, `ptyxis-agent`
+is an in-tree vendored component under `third_party/ptyxis-agent/`.
+
+### Provenance and License
+
+- **Upstream**: Christian Hergert / Ptyxis (`GPL-3.0-or-later`)
+- **Import Version**: 49.0
+- **Documentation**: See `third_party/ptyxis-agent/README.md` for full provenance details and local patch notes.
+
+### Maintaining Local Patches
+
+Local modifications (`blueshell-vm-providers.{c,h}`, `test-vm-providers.c`,
+and custom `meson.build`) are documented in `third_party/ptyxis-agent/README.md`.
+When re-vendoring from newer Ptyxis releases, preserve the `blueshell_vm_providers_enumerate`
+hook in `ptyxis-agent.c` and verify `test-vm-providers` passes.
+
