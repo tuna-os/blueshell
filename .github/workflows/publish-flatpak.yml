@@ -3,6 +3,9 @@ name: Publish Flatpak
 # Build BlueShell as a Flatpak OCI image for x86_64 and aarch64, push both
 # to GHCR, and update the TunaOS Flatpak index (tunaos.org/flatpak) so
 # `flatpak install tuna-os org.tunaos.BlueShell` serves current builds.
+# It also exports the built /app tree as a per-arch tarball: FlatPark only
+# accepts tar/zip/deb/AppImage release downloads (not .flatpak bundles),
+# and the tarball is exactly what the bundle and OCI image ship.
 #
 # Modelled verbatim on tuna-os/finupdate's publish-flatpak.yml (the
 # canonical tuna-os flatpak pipeline), with the same two inherited
@@ -69,6 +72,15 @@ jobs:
           flatpak build-bundle --oci --arch=${{ matrix.arch }} \
             repo blueshell-${{ matrix.arch }}.oci "$APP_ID"
 
+      - name: Export release tarball
+        run: |
+          # The flatpak-builder action leaves its ostree repo in ./repo with
+          # the built commit on app/<id>/<arch>/master (the manifest's
+          # default-branch). A checkout failure here fails the build loudly
+          # rather than shipping a tarball that drifted from the bundle.
+          ostree --repo=repo checkout -U "app/${APP_ID}/${{ matrix.arch }}/master" tarball-root
+          tar -C tarball-root/files -czf "blueshell-${{ matrix.arch }}.tar.gz" .
+
       - name: Upload OCI artifact
         uses: actions/upload-artifact@v7
         with:
@@ -81,6 +93,13 @@ jobs:
         with:
           name: blueshell-${{ matrix.arch }}-bundle
           path: blueshell-${{ matrix.arch }}.flatpak
+          retention-days: 7
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: blueshell-${{ matrix.arch }}-tarball
+          path: blueshell-${{ matrix.arch }}.tar.gz
           retention-days: 7
 
   publish:
@@ -175,11 +194,15 @@ jobs:
         with:
           pattern: "*-bundle"
           merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: "*-tarball"
+          merge-multiple: true
       - name: Upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${GITHUB_REF_NAME}" *.flatpak --clobber \
+          gh release upload "${GITHUB_REF_NAME}" *.flatpak *.tar.gz --clobber \
             --repo "${GITHUB_REPOSITORY}"
 
   release-tip:
@@ -200,6 +223,10 @@ jobs:
         with:
           pattern: "*-bundle"
           merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: "*-tarball"
+          merge-multiple: true
 
       - name: Publish the bundles as the `tip` prerelease
         env:
@@ -214,10 +241,12 @@ jobs:
 
           notes="Rolling build of \`ptyxis-port\` at \`${GITHUB_SHA:0:7}\`.
 
-          Install the Flatpak bundle for your architecture:
+          Install the Flatpak bundle for your architecture, or unpack the
+          matching tarball (the same /app tree FlatPark repackages):
 
           \`\`\`sh
           flatpak install --user --reinstall blueshell-x86_64.flatpak
+          tar -xzf blueshell-x86_64.tar.gz
           \`\`\`
 
           Or track the TunaOS remote, which serves this same build:
@@ -237,5 +266,5 @@ jobs:
               --notes "$notes" --prerelease
           fi
 
-          gh release upload tip ./*.flatpak --clobber \
+          gh release upload tip ./*.flatpak ./*.tar.gz --clobber \
             --repo "$GITHUB_REPOSITORY"
