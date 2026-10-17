@@ -114,9 +114,49 @@ pub fn threadEnter(
         // as a special case in os/flatpak.zig) since the
         // command is on the host.
         .flatpak => null,
-    } else if (self.subprocess.external_master_fd != null) null else return error.ProcessNotStarted;
+    } else return error.ProcessNotStarted;
     errdefer if (process) |*p| p.deinit();
 
+    try threadEnterPty(pty_fds, process, io, td, .exec);
+    const data = threadData(td);
+
+    // Start our process watcher. If we have an xev.Process use it.
+    if (data.process) |*p| p.wait(
+        td.loop,
+        &data.process_wait_c,
+        termio.Termio.ThreadData,
+        td,
+        processExit,
+    ) else if (comptime build_config.flatpak) flatpak: {
+        switch (self.subprocess.process orelse break :flatpak) {
+            // If we're in flatpak and we have a flatpak command
+            // then we can run the special flatpak logic for watching.
+            .flatpak => |*c| c.waitXev(
+                td.loop,
+                &data.flatpak_wait_c,
+                termio.Termio.ThreadData,
+                td,
+                flatpakExit,
+            ),
+
+            .fork_exec => {},
+        }
+    }
+}
+
+pub const PtyFds = struct {
+    read: Pty.Fd,
+    write: Pty.Fd,
+};
+
+/// Start the read/write machinery shared by PTY-backed termio backends.
+pub fn threadEnterPty(
+    pty_fds: PtyFds,
+    process: ?xev.Process,
+    io: *termio.Termio,
+    td: *termio.Termio.ThreadData,
+    comptime kind: termio.backend.Kind,
+) !void {
     // Track our process start time for abnormal exits
     const process_start: std.Io.Timestamp = .now(global.io(), .awake);
 
@@ -144,8 +184,7 @@ pub fn threadEnter(
     );
     read_thread.setName(global.io(), "io-reader") catch {};
 
-    // Setup our threadata backend state to be our own
-    td.backend = .{ .exec = .{
+    const data: ThreadData = .{
         .start = process_start,
         .write_stream = stream,
         .process = process,
@@ -153,38 +192,20 @@ pub fn threadEnter(
         .read_thread_pipe = pipe[1],
         .read_thread_fd = pty_fds.read,
         .termios_timer = termios_timer,
-    } };
-
-    // Start our process watcher. If we have an xev.Process use it.
-    if (process) |*p| p.wait(
-        td.loop,
-        &td.backend.exec.process_wait_c,
-        termio.Termio.ThreadData,
-        td,
-        processExit,
-    ) else if (comptime build_config.flatpak) flatpak: {
-        switch (self.subprocess.process orelse break :flatpak) {
-            // If we're in flatpak and we have a flatpak command
-            // then we can run the special flatpak logic for watching.
-            .flatpak => |*c| c.waitXev(
-                td.loop,
-                &td.backend.exec.flatpak_wait_c,
-                termio.Termio.ThreadData,
-                td,
-                flatpakExit,
-            ),
-
-            .fork_exec => {},
-        }
-    }
+    };
+    td.backend = switch (kind) {
+        .exec => .{ .exec = data },
+        .adopt => .{ .adopt = data },
+    };
 
     // Start our termios timer. We don't support this on Windows.
     // Fundamentally, we could support this on Windows so we're just
     // waiting for someone to implement it.
     if (comptime builtin.os.tag != .windows) {
-        termios_timer.run(
+        const backend_data = threadData(td);
+        backend_data.termios_timer.run(
             td.loop,
-            &td.backend.exec.termios_timer_c,
+            &backend_data.termios_timer_c,
             TERMIOS_POLL_MS,
             termio.Termio.ThreadData,
             td,
@@ -275,17 +296,30 @@ pub fn restartSubprocess(
     try io.renderer_wakeup.notify();
 }
 
+fn threadData(td: *termio.Termio.ThreadData) *ThreadData {
+    return switch (td.backend) {
+        .exec => |*data| data,
+        .adopt => |*data| data,
+    };
+}
+
 pub fn threadExit(self: *Exec, td: *termio.Termio.ThreadData) void {
     assert(td.backend == .exec);
-    const exec = &td.backend.exec;
+    const data = threadData(td);
 
-    if (exec.exited) self.subprocess.externalExit();
+    if (data.exited) self.subprocess.externalExit();
     self.subprocess.stop();
+    threadExitPty(td);
+}
+
+/// Stop the PTY reader shared by PTY-backed termio backends.
+pub fn threadExitPty(td: *termio.Termio.ThreadData) void {
+    const data = threadData(td);
 
     // Quit our read thread after exiting the subprocess so that
     // we don't get stuck waiting for data to stop flowing if it is
     // a particularly noisy process.
-    switch (posix.errno(posix.system.write(exec.read_thread_pipe, "x", 1))) {
+    switch (posix.errno(posix.system.write(data.read_thread_pipe, "x", 1))) {
         .SUCCESS => {},
 
         // EPIPE means that our read thread is closed already, which is
@@ -300,7 +334,7 @@ pub fn threadExit(self: *Exec, td: *termio.Termio.ThreadData) void {
 
     if (comptime builtin.os.tag == .windows) {
         // Interrupt the blocking read so the thread can see the quit message
-        if (windows.exp.kernel32.CancelIoEx(exec.read_thread_fd, null) == windows.FALSE) {
+        if (windows.exp.kernel32.CancelIoEx(data.read_thread_fd, null) == windows.FALSE) {
             switch (windows.GetLastError()) {
                 .NOT_FOUND => {},
                 else => |err| log.warn("error interrupting read thread err={}", .{err}),
@@ -308,7 +342,7 @@ pub fn threadExit(self: *Exec, td: *termio.Termio.ThreadData) void {
         }
     }
 
-    exec.read_thread.join();
+    data.read_thread.join();
 }
 
 pub fn focusGained(
@@ -317,9 +351,15 @@ pub fn focusGained(
     focused: bool,
 ) !void {
     _ = self;
+    try focusGainedPty(td, focused);
+}
 
-    assert(td.backend == .exec);
-    const execdata = &td.backend.exec;
+/// Update termios polling for a PTY-backed termio backend.
+pub fn focusGainedPty(
+    td: *termio.Termio.ThreadData,
+    focused: bool,
+) !void {
+    const data = threadData(td);
 
     // Windows has no termios, so there is nothing to poll.
     if (comptime builtin.os.tag == .windows) return;
@@ -327,19 +367,19 @@ pub fn focusGained(
     if (!focused) {
         // Flag the timer to end on the next iteration. This is
         // a lot cheaper than doing full timer cancellation.
-        execdata.termios_timer_running = false;
+        data.termios_timer_running = false;
     } else {
         // Always set this to true. There is a race condition if we lose
         // focus and regain focus before the termios timer ticks where
         // if we don't set this unconditionally the timer will end on
         // the next iteration.
-        execdata.termios_timer_running = true;
+        data.termios_timer_running = true;
 
         // If we're focused, we want to start our termios timer. We
         // only do this if it isn't already running. We use the termios
         // callback because that'll trigger an immediate state check AND
         // start the timer.
-        if (execdata.termios_timer_c.state() != .active) {
+        if (data.termios_timer_c.state() != .active) {
             _ = termiosTimer(td, undefined, undefined, {});
         }
     }
@@ -423,8 +463,7 @@ fn termiosTimer(
     };
 
     const td = td_.?;
-    assert(td.backend == .exec);
-    const exec = &td.backend.exec;
+    const exec = threadData(td);
 
     // This is kind of hacky but we rebuild a Pty struct to get the
     // termios data.
@@ -490,7 +529,17 @@ pub fn queueWrite(
     linefeed: bool,
 ) !void {
     _ = self;
-    const exec = &td.backend.exec;
+    try queueWritePty(alloc, td, data, linefeed);
+}
+
+/// Queue bytes for a PTY-backed termio backend.
+pub fn queueWritePty(
+    alloc: Allocator,
+    td: *termio.Termio.ThreadData,
+    data: []const u8,
+    linefeed: bool,
+) !void {
+    const exec = threadData(td);
 
     // If our process is exited then we don't send any more writes.
     if (exec.exited) return;
@@ -537,7 +586,6 @@ pub fn queueWrite(
         };
 
         //for (slice) |b| log.warn("write: {x}", .{b});
-
         exec.write_stream.queueWrite(
             td.loop,
             &exec.write_queue,
@@ -667,13 +715,6 @@ pub const Config = struct {
 
     rt_pre_exec_info: Command.RtPreExecInfo,
     rt_post_fork_info: Command.RtPostForkInfo,
-
-    /// If set, the subprocess is "adopted": Exec will not fork/exec a
-    /// child or open a new pty. Instead the given master fd is owned by
-    /// this Exec and used for both read and write. The actual child
-    /// process lives outside Ghostty (e.g. spawned by ptyxis-agent in a
-    /// container). Process-exit watching is skipped.
-    external_master_fd: ?Pty.Fd = null,
 };
 
 const Subprocess = struct {
@@ -690,10 +731,6 @@ const Subprocess = struct {
 
     rt_pre_exec_info: Command.RtPreExecInfo,
     rt_post_fork_info: Command.RtPostForkInfo,
-
-    /// See Config.external_master_fd. When non-null, start() adopts this
-    /// fd instead of opening a new pty / forking a child.
-    external_master_fd: ?Pty.Fd = null,
 
     /// Union that represents the running process type.
     const Process = union(enum) {
@@ -975,8 +1012,6 @@ const Subprocess = struct {
             .rt_pre_exec_info = cfg.rt_pre_exec_info,
             .rt_post_fork_info = cfg.rt_post_fork_info,
 
-            .external_master_fd = cfg.external_master_fd,
-
             // Should be initialized with initTerminal call.
             .grid_size = .{},
             .screen_size = .{ .width = 1, .height = 1 },
@@ -994,35 +1029,8 @@ const Subprocess = struct {
 
     /// Start the subprocess. If the subprocess is already started this
     /// will crash.
-    pub fn start(self: *Subprocess, alloc: Allocator) !struct {
-        read: Pty.Fd,
-        write: Pty.Fd,
-    } {
+    pub fn start(self: *Subprocess, alloc: Allocator) !PtyFds {
         assert(self.pty == null and self.process == null);
-
-        // Adopted mode: a master fd was handed to us by an external
-        // spawner (e.g. ptyxis-agent). Skip pty.open + fork; the child
-        // process is already running on the other side of master_fd.
-        if (self.external_master_fd) |master| {
-            // Set initial size on the adopted pty.
-            const ws: ptypkg.winsize = .{
-                .ws_row = @intCast(self.grid_size.rows),
-                .ws_col = @intCast(self.grid_size.columns),
-                .ws_xpixel = @intCast(self.screen_size.width),
-                .ws_ypixel = @intCast(self.screen_size.height),
-            };
-            self.pty = .{
-                .master = master,
-                .slave = -1,
-                .tty_name_buf = undefined,
-                .tty_name = null,
-            };
-            if (self.pty) |*p| p.setSize(ws) catch |err| {
-                log.warn("failed to set size on adopted pty: {}", .{err});
-            };
-            // self.process stays null — there is no Ghostty-owned child.
-            return .{ .read = master, .write = master };
-        }
 
         // This function is funny because on POSIX systems it can
         // fail in the forked process. This is flipped to true if

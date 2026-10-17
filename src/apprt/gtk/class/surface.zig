@@ -2565,6 +2565,7 @@ pub const Surface = extern struct {
                 const pty = v.subprocess.pty orelse return null;
                 break :master pty.master;
             },
+            .adopt => |*v| v.master_fd,
         };
         // std.posix.tcgetpgrp doesn't compile against libc on this Zig
         // (std.c lacks the declaration), so issue the ioctl directly.

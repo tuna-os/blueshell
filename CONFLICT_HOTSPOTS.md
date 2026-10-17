@@ -21,42 +21,57 @@ in the same commit that drops the patch.
 
 ## `src/termio/Exec.zig` — HIGH risk
 
-**What we added:**
+**What we changed:**
 
-- `Config.external_master_fd: ?Pty.Fd = null` and the matching field on
-  `Subprocess`.
-- An early branch at the top of `Subprocess.start`: if
-  `external_master_fd` is set, wrap it in a `Pty{ master, slave = -1 }`,
-  set the size, and return the fd as both read and write. Skip the
-  `Pty.open` + fork path entirely.
-- In `Exec.threadEnter`, the `else return error.ProcessNotStarted`
-  branch now also accepts a null process when `external_master_fd` is
-  set (we have a pty but no child to watch — the child is the agent's).
+- Extracted the PTY stream, reader-thread, and termios-timer setup into
+  `threadEnterPty`, shared by the exec and adopt backends.
+- Added shared PTY lifecycle helpers for thread exit, focus changes, and
+  queued writes. Thread-local data lookup accepts both backend tags.
+- Kept subprocess creation and process watching exclusively in `Exec`;
+  adopted descriptors no longer add state or branches to `Subprocess`.
 
-**Why it can break:** upstream restructures `Subprocess.start` or
-`Process` union. Today's branch is at the top of `start` and is easy
-to re-port; if it moved into a different control flow, re-do it.
+**Why it can break:** upstream frequently changes the read pipeline,
+`ThreadData`, or `Exec.threadEnter`. Those changes must remain common to
+both PTY-backed backends without moving subprocess state into adopt mode.
 
-**Resolution recipe:** find the new shape of `Subprocess.start`, drop
-the adopt branch at the earliest point after `assert(pty == null and
-process == null)`. Ensure `threadEnter` still tolerates null process.
+**Resolution recipe:** preserve upstream's latest post-spawn PTY setup,
+then keep `threadEnterPty` as the single initialization path used after
+`Subprocess.start` and by `Adopt.threadEnter`. Keep process-watch setup in
+`Exec.threadEnter` only.
 
 **Upstreaming:** issue #6.
+
+---
+
+## `src/termio/backend.zig` — HIGH risk
+
+**What we added:** the `.adopt` backend and thread-data variants. `Adopt`
+owns an externally-created PTY master, applies terminal resizes, and uses
+the shared Exec PTY read/write lifecycle without creating or watching a
+subprocess.
+
+**Why it can break:** every new upstream backend method or exhaustive
+switch must define adopt behavior too.
+
+**Resolution recipe:** retain the `.adopt` variants and delegate
+PTY-only operations to the shared helpers in `Exec.zig`. Process
+inspection uses the owned PTY; abnormal child-exit handling remains
+exec-only.
 
 ---
 
 ## `src/Surface.zig` — MEDIUM risk
 
 **What we added:** queries `rt_surface.externalMasterFd()` via
-`@hasDecl` and threads the result into `termio.Exec.Config`.
+`@hasDecl`. When present, it selects the `.adopt` backend directly;
+otherwise it builds the normal `Exec` backend and subprocess environment.
 
-**Why it can break:** upstream changes the `Exec.Config` literal in
-`Surface.init`.
+**Why it can break:** upstream changes backend initialization in
+`Surface.init` or adds backend-dependent child-exit reporting.
 
-**Resolution recipe:** the addition is a single field
-`.external_master_fd = external_master_fd` inside the `termio.Exec.init`
-config struct, plus the `external_master_fd` local computed above.
-Place anywhere — `Config` is order-insensitive.
+**Resolution recipe:** preserve the backend selection before
+`Termio.init`. The external fd goes only into `Adopt.Config`; never add it
+back to `Exec.Config`.
 
 ---
 
@@ -81,8 +96,9 @@ implementation.
 
 ## `src/apprt/gtk/class/surface.zig` — LOW risk
 
-**What we added:** `externalMasterFd` method that calls
-`Application.default().takePendingExternalMasterFd()`.
+**What we added:** `externalMasterFd` calls
+`Application.default().takePendingExternalMasterFd()`. Foreground-agent
+detection also reads the PTY master directly from the adopt backend.
 
 ---
 
