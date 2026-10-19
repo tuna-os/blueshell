@@ -95,6 +95,69 @@ The manifest bundles ptyxis-agent at `/app/libexec/ptyxis-agent`.
 
 For profile-specific settings, write to `priv.profile_path` instead of `null`, and call `self.syncActiveProfile()` instead of `triggerReload()`.
 
+## CI & GitHub Workflows
+
+The repository contains 20 workflow files under `.github/workflows/`. Because Blueshell is a fork of Ghostty, these workflows fall into two distinct groups: **Fork-owned / active workflows** tailored for Blueshell on Linux/TunaOS, and **Inherited upstream Ghostty workflows**, many of which do not run here or fail due to missing upstream secrets/runners.
+
+### Active Workflows
+
+The following workflows are actively maintained and run in the `tuna-os/blueshell` repository:
+
+| Workflow | File | Trigger | Purpose & Notes |
+| --- | --- | --- | --- |
+| **ptyxis-tests** | `ptyxis-tests.yml` | Push (`ptyxis-port`), PR, dispatch | **Primary CI gate**. Runs Zig formatting (`zig fmt --check`), unit & integration tests (`config_bridge`, `profile_store`, `preferences_logic`, `agent_monitor`, shell integration/flatpak host), vendored `ptyxis-agent` meson tests, headless UI smoke test (`test/ui/smoke.sh`), and captures screenshot walkthroughs (`test/ui/walkthrough.sh`). On push to `ptyxis-port`, commits walkthrough shots to the `screenshots` branch. |
+| **Blueshell Flatpak** | `ghostty-ptyxis.yml` | Push (`ptyxis-port`), dispatch | Builds the standalone Flatpak bundle (`blueshell.flatpak`) using `flatpak-builder` in GNOME 48 container and uploads it as an artifact. |
+| **Publish Flatpak** | `publish-flatpak.yml` | Push (`ptyxis-port`, `v*` tags), dispatch | Native multi-arch build (`x86_64` on `ubuntu-24.04`, `aarch64` on `ubuntu-24.04-arm`). Pushes OCI image to GHCR (`ghcr.io/tuna-os/blueshell`), exports per-arch tarballs for release bundles, and updates the TunaOS Flatpak index (`tunaos.org/flatpak`) via `FLATPAK_INDEX_TOKEN`. |
+| **Publish Ghostty Flatpak** | `publish-ghostty-flatpak.yml` | Cron (Sundays 05:00 UTC), dispatch, PR (paths: `flatpak/ghostty-stock/**`) | Builds and republishes stock upstream Ghostty (`com.mitchellh.ghostty`) pinned at a known-good commit to the TunaOS Flatpak remote, alongside Blueshell. |
+| **upstream-sync** | `upstream-sync.yml` | Cron (Mondays 09:00 UTC), dispatch | Rebase automation onto `ghostty-org/ghostty:main`. If clean rebase succeeds, opens a sync PR; if conflicts arise, files an issue with conflict hotspots and commit range. See [UPSTREAM_SYNC.md](UPSTREAM_SYNC.md). |
+| **Clean Artifacts** | `clean-artifacts.yml` | Cron (Daily 00:00 UTC), dispatch | Prunes workflow run artifacts older than 1 week to conserve repository storage. |
+
+### Inherited Upstream Workflows
+
+These workflows are inherited from upstream Ghostty (`ghostty-org/ghostty`). Most are non-functional or dormant in this fork:
+
+| Workflow | File | Trigger / Condition | Status in Blueshell | Why it does not run or is unused |
+| --- | --- | --- | --- | --- |
+| **Test** | `test.yml` | Push, PR, dispatch | **Dormant / Skipped** | Upstream's comprehensive matrix (50+ jobs across macOS, Linux, Windows, WASM). Gated by `if: github.repository == 'ghostty-org/ghostty'` and relies on Namespace Cloud runners (`namespace-profile-ghostty-*`). Blueshell uses `ptyxis-tests.yml` instead. |
+| **Nix** | `nix.yml` | Push, PR | **Failing / Inactive** | Runs on `namespace-profile-ghostty-sm`. Blueshell ships as a Flatpak, not a Nix package. |
+| **Vouch (5 workflows)** | `vouch-check-issue.yml`<br>`vouch-check-pr.yml`<br>`vouch-manage-by-discussion.yml`<br>`vouch-manage-by-issue.yml`<br>`vouch-sync-codeowners.yml` | Issue, PR, discussion, schedule | **Non-functional** | Upstream's anti-spam vouch bot (`mitchellh/vouch`). Requires GitHub App secrets `VOUCH_APP_ID` and `VOUCH_APP_PRIVATE_KEY` which are not provisioned in `tuna-os`. Fails immediately when issues or PRs are opened/commented. |
+| **Milestone Action** | `milestone.yml` | Closed issues / PRs | **Inactive** | Auto-assigns milestones upon PR merge or issue closure. Harmless but no milestones are currently configured in Blueshell. |
+| **Flatpak (upstream)** | `flatpak.yml` | Dispatch | **Unused** | Gated to `ghostty-org/ghostty` with upstream runner matrix. Superseded by `ghostty-ptyxis.yml` and `publish-flatpak.yml`. |
+| **Snap** | `snap.yml` | Dispatch | **Unused** | Upstream Snap packaging; requires Namespace Cloud runners and build artifacts from upstream `test.yml`. |
+| **Release Tag** | `release-tag.yml` | Dispatch | **Unused** | Upstream macOS release pipeline (Apple notarization, Sparkle appcast, Sentry, Cloudflare R2). Tag push trigger was intentionally disabled in Blueshell; release packaging is handled by `publish-flatpak.yml`. |
+| **Publish Tagged Release** | `publish-tag.yml` | Dispatch | **Unused** | Upstream release deployer; runs on `namespace-profile-ghostty-sm`. |
+| **Release Tip** | `release-tip.yml` | Workflow run (`Test` on `main`), dispatch | **Unused** | Upstream nightly tip release pipeline triggered by completed upstream `Test` workflow on `main`. |
+| **Update colorschemes** | `update-colorschemes.yml` | Cron (Sundays 00:00 UTC), dispatch | **Dormant** | Gated to `ghostty-org/ghostty`; syncs iTerm2 color schemes. |
+
+### CI Status Gates & Branch Protection
+
+- **Merge Target**: The integration and default branch is `ptyxis-port`. All PRs should target `ptyxis-port`.
+- **Status Checks**: The mandatory CI gate for pull requests is **`ptyxis-tests`** (`Unit + integration tests`). It verifies compilation, fork logic tests, and headless execution under Xvfb.
+- **Upstream Test vs Fork Test**: Do not attempt to run upstream's `test.yml` as a prerequisite for PRs. It requires custom runner profiles and upstream secrets.
+
+### Guidelines for Adding or Modifying Workflows
+
+1. **Avoid Upstream Merge Conflicts**:
+   - Keep Blueshell-specific workflows separate from upstream workflow files. Fork-specific workflows should use distinct names (such as `ptyxis-tests.yml`, `ghostty-ptyxis.yml`, `publish-flatpak.yml`).
+   - Do not heavily edit inherited upstream workflow files (`test.yml`, `release-*.yml`) unless disabling unwanted triggers; keeping them close to upstream minimizes conflicts during weekly rebases (`upstream-sync`).
+2. **Runner Selection**:
+   - Use standard GitHub-hosted runners (`ubuntu-24.04` or `ubuntu-latest`, and `ubuntu-24.04-arm` where native aarch64 is needed).
+   - Never use `namespace-profile-*` runners; those are proprietary to upstream Ghostty's CI infrastructure.
+3. **Permissions**:
+   - Follow the principle of least privilege. Declare explicit top-level `permissions:` blocks in workflow files.
+   - Workflows opening issues or PRs (like `upstream-sync.yml`) require `contents: write`, `pull-requests: write`, and `issues: write`.
+4. **Zig Versions**:
+   - Ensure the Zig toolchain in CI matches the `minimum_zig_version` specified in `build.zig.zon` (currently `0.16.0`).
+
+### Troubleshooting Common CI Failures
+
+- **Zig dependency fetch timeouts (HTTP 5xx)**:
+  Upstream dependencies hosted on external git mirrors (e.g., `gitlab.freedesktop.org`) occasionally suffer transient 502/504 errors. `ptyxis-tests.yml` includes an automatic retry loop for `zig build --fetch=all`. If a fetch fails locally or in CI, rerun the job.
+- **`Vouch - Check PR` / `Vouch - Manage by Issue` failures**:
+  The `vouch-*` workflows fail because the GitHub App private key secrets (`VOUCH_APP_ID`, `VOUCH_APP_PRIVATE_KEY`) do not exist in the `tuna-os` org. These failures can be ignored by contributors; they do not block PR merging.
+- **Missing display for UI tests**:
+  The UI smoke test and screenshot walkthrough require an X11 display server. In CI, they execute inside `xvfb-run -a dbus-run-session`. For local testing, ensure `xvfb` and `dbus` are available, or use the containerized toolbox workflow described in [Quick start](#quick-start-fedora--silverblue).
+
 ---
 
 # Developing Ghostty
