@@ -47,8 +47,11 @@ jobs:
 
       - name: Install blueprint-compiler 0.16 (Ubuntu 24.04 ships 0.12)
         run: |
-          git clone --depth 1 -b v0.16.0 \
-            https://gitlab.gnome.org/GNOME/blueprint-compiler.git "$HOME/blueprint-compiler"
+          git init "$HOME/blueprint-compiler"
+          cd "$HOME/blueprint-compiler"
+          git remote add origin https://gitlab.gnome.org/GNOME/blueprint-compiler.git
+          git fetch --depth 1 origin be7beddc5201b1f5a5af517077dbc7c5390ecce1
+          git checkout FETCH_HEAD
           mkdir -p "$HOME/.local/bin"
           # Running from a git checkout reports '--version: uninstalled',
           # which Ghostty's semver check can't parse — answer it ourselves.
@@ -61,8 +64,13 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install Zig
+        env:
+          ZIG_SHA256: 70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
         run: |
-          curl -sSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" | tar xJ -C "$HOME"
+          curl -fsSL -o /tmp/zig.tar.xz "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz"
+          echo "${ZIG_SHA256}  /tmp/zig.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/zig.tar.xz -C "$HOME"
+          rm -f /tmp/zig.tar.xz
           echo "$HOME/zig-x86_64-linux-${ZIG_VERSION}" >> "$GITHUB_PATH"
 
       - name: zig fmt check (fork-owned sources)
