@@ -32,23 +32,28 @@ jobs:
     steps:
       - name: Validate Version Input
         if: github.event_name == 'workflow_dispatch'
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [[ ! "${{ github.event.inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ ! "$INPUT_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Error: Version must follow the format vX.Y.Z (e.g., v1.0.0)."
             exit 1
           fi
 
-          echo "Version is valid: ${{ github.event.inputs.version }}"
+          echo "Version is valid: $INPUT_VERSION"
 
       - name: Extract the Version
         id: extract_version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          if [[ "$EVENT_NAME" == "push" ]]; then
             # Remove the leading 'v' from the tag
             VERSION=${GITHUB_REF#refs/tags/v}
             echo "version=$VERSION" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION=${{ github.event.inputs.version }}
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            VERSION=$INPUT_VERSION
             VERSION=${VERSION#v}
             echo "version=$VERSION" >> $GITHUB_OUTPUT
           else
@@ -107,9 +112,12 @@ jobs:
           cp zig-out/dist/ghostty-${GHOSTTY_VERSION}.tar.gz ghostty-source.tar.gz
 
       - name: Sign Tarball
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          echo -n "${{ secrets.MINISIGN_KEY }}" > minisign.key
-          echo -n "${{ secrets.MINISIGN_PASSWORD }}" > minisign.password
+          echo -n "$MINISIGN_KEY" > minisign.key
+          echo -n "$MINISIGN_PASSWORD" > minisign.password
           nix develop -c minisign -S -m "ghostty-${GHOSTTY_VERSION}.tar.gz" -s minisign.key < minisign.password
           nix develop -c minisign -S -m "ghostty-source.tar.gz" -s minisign.key < minisign.password
 

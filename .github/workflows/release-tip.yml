@@ -233,9 +233,12 @@ jobs:
           cp zig-out/dist/*.tar.gz ghostty-source.tar.gz
 
       - name: Sign Tarball
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          echo -n "${{ secrets.MINISIGN_KEY }}" > minisign.key
-          echo -n "${{ secrets.MINISIGN_PASSWORD }}" > minisign.password
+          echo -n "$MINISIGN_KEY" > minisign.key
+          echo -n "$MINISIGN_PASSWORD" > minisign.password
           nix develop -c minisign -S -m ghostty-source.tar.gz -s minisign.key < minisign.password
 
       - name: Update Release
@@ -288,9 +291,12 @@ jobs:
           cp zig-out/dist/*.tar.gz libghostty-vt-source.tar.gz
 
       - name: Sign Tarball
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          echo -n "${{ secrets.MINISIGN_KEY }}" > minisign.key
-          echo -n "${{ secrets.MINISIGN_PASSWORD }}" > minisign.password
+          echo -n "$MINISIGN_KEY" > minisign.key
+          echo -n "$MINISIGN_PASSWORD" > minisign.password
           nix develop -c minisign -S -m libghostty-vt-source.tar.gz -s minisign.key < minisign.password
 
       - name: Update Release
@@ -373,9 +379,12 @@ jobs:
           zip -9 -r ../../ghostty-vt.xcframework.zip ghostty-vt.xcframework
 
       - name: Sign XCFramework
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          echo -n "${{ secrets.MINISIGN_KEY }}" > minisign.key
-          echo -n "${{ secrets.MINISIGN_PASSWORD }}" > minisign.password
+          echo -n "$MINISIGN_KEY" > minisign.key
+          echo -n "$MINISIGN_PASSWORD" > minisign.password
           nix develop -c minisign -S -m ghostty-vt.xcframework.zip -s minisign.key < minisign.password
 
       - name: Update Release
@@ -497,9 +506,12 @@ jobs:
           done
 
       - name: Sign WASM
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          echo -n "${{ secrets.MINISIGN_KEY }}" > minisign.key
-          echo -n "${{ secrets.MINISIGN_PASSWORD }}" > minisign.password
+          echo -n "$MINISIGN_KEY" > minisign.key
+          echo -n "$MINISIGN_PASSWORD" > minisign.password
           nix develop -c minisign -S -m ghostty-vt.wasm -s minisign.key < minisign.password
           nix develop -c minisign -S -m ghostty-vt-small.wasm -s minisign.key < minisign.password
 
