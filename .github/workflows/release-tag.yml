@@ -296,8 +296,15 @@ jobs:
     needs: [build-macos]
     steps:
       - name: Install sentry-cli
+        env:
+          SENTRY_CLI_VERSION: 2.57.0
+          SENTRY_INSTALLER_SHA256: 526cc0111370d37fda6c8c16b338ae3d341028adb6cebd8e9e0c1077a8421ba0
         run: |
-          curl -sL https://sentry.io/get-cli/ | bash
+          installer="${RUNNER_TEMP}/install-sentry-cli.sh"
+          curl --fail --show-error --silent --location \
+            --output "$installer" https://sentry.io/get-cli/
+          echo "${SENTRY_INSTALLER_SHA256}  ${installer}" | sha256sum --check --strict
+          bash "$installer"
 
       - name: Download macOS Artifacts
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
