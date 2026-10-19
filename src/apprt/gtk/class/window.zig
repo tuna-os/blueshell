@@ -2553,21 +2553,31 @@ pub const Window = extern struct {
             return;
         }
 
-        spawnInContainerById(self, id) catch |err| {
+        const app = Application.default();
+        const token = app.allocContainerSpawnToken();
+
+        spawnInContainerById(self, id, token) catch |err| {
             log.warn("spawnInContainerById({s}) failed: {s}", .{ id, @errorName(err) });
+            // Clean up any pending spawn transaction that might have been stashed
+            app.abortPendingContainerSpawn(token);
             // Fall back to a host tab on failure so the user gets feedback.
             self.performBindingAction(.new_tab);
             return;
         };
-        // Master fd is now stashed on Application; the next surface that
-        // spins up will adopt it. Trigger the new tab.
-        self.performBindingAction(.new_tab);
 
-        // Apply container title + icon to the freshly-created TabPage
-        // (which becomes the selected page after newTabPage).
-        const app2 = Application.default();
-        const title = app2.takePendingContainerTabTitle();
-        const icon = app2.takePendingContainerTabIcon();
+        // Create the new tab page with overrides carrying the container_spawn_token.
+        // This ensures ONLY the freshly created surface for this tab can claim the master fd.
+        const parent_surface = if (self.getActiveSurface()) |v| v.core() else null;
+        _ = self.newTabPage(parent_surface, .tab, .{
+            .container_spawn_token = token,
+        });
+
+        // Consume metadata and apply container title + icon to the freshly-created TabPage.
+        // If the surface failed to initialize or didn't match the token, takePendingContainerMetadata
+        // will still clean up the remaining transaction resources and any untaken master_fd.
+        const maybe_meta = app.takePendingContainerMetadata(token);
+        const title = if (maybe_meta) |m| m.title else null;
+        const icon = if (maybe_meta) |m| m.icon else null;
         defer if (title) |t| std.heap.c_allocator.free(t);
         defer if (icon) |i| std.heap.c_allocator.free(i);
 
@@ -2618,12 +2628,15 @@ pub const Window = extern struct {
 
     /// Test helper: invoke the agent-spawn path directly with a given id.
     pub fn smokeSpawnInContainer(self: *Self, id: []const u8) void {
-        spawnInContainerById(self, id) catch |err| {
+        const app = Application.default();
+        const token = app.allocContainerSpawnToken();
+        spawnInContainerById(self, id, token) catch |err| {
             log.warn("smokeSpawnInContainer({s}) failed: {s}", .{ id, @errorName(err) });
+            app.abortPendingContainerSpawn(token);
         };
     }
 
-    fn spawnInContainerById(self: *Self, id: []const u8) !void {
+    fn spawnInContainerById(self: *Self, id: []const u8, token: u64) !void {
         const app = Application.default();
         const store = app.containerModel() orelse return error.NoAgent;
         const client_ptr = app.containerClient() orelse return error.NoAgent;
@@ -2651,6 +2664,7 @@ pub const Window = extern struct {
         const cpath = container_path orelse return error.ContainerNotFound;
 
         const master_fd = try client_ptr.createPty();
+        errdefer compat_fd.close(master_fd);
         log.info("agent CreatePty master_fd={d} for container {s}", .{ master_fd, cpath });
 
         // Open the producer (slave) side via libc grantpt/unlockpt/ptsname/open.
@@ -2703,13 +2717,28 @@ pub const Window = extern struct {
 
         log.info("Container.Spawn ok: proc_path={s}", .{proc_path});
 
-        // Stash master_fd on the Application; the next Surface to
-        // initialize (triggered by performBindingAction(.new_tab))
-        // adopts it instead of forking a child of its own.
-        app.setPendingExternalMasterFd(master_fd);
-        // Also stash the title + icon so the new tab page can identify
-        // itself as a container (matches Ptyxis behavior).
-        app.setPendingContainerTabMetadata(display_name, icon_name);
+        // Duplicate metadata strings for the transaction
+        const alloc = std.heap.c_allocator;
+        const title_copy = if (display_name.len > 0)
+            try alloc.dupeZ(u8, display_name)
+        else
+            null;
+        errdefer if (title_copy) |t| alloc.free(t);
+
+        const icon_copy = if (icon_name.len > 0)
+            try alloc.dupeZ(u8, icon_name)
+        else
+            null;
+        errdefer if (icon_copy) |i| alloc.free(i);
+
+        // Stash the owned transaction on Application with the token.
+        // Surface will adopt the master_fd only if its token matches.
+        app.setPendingContainerSpawn(.{
+            .token = token,
+            .master_fd = master_fd,
+            .title = title_copy,
+            .icon = icon_copy,
+        });
     }
 
     fn alloc(_: *Self) std.mem.Allocator {

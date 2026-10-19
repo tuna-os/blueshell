@@ -109,19 +109,19 @@ detection also reads the PTY master directly from the adopt backend.
 - New imports: `ContainerClient`, `Container`, `palette_mod`,
   `preferences_window`, `config_bridge`.
 - Private struct gains: `container_client`, `container_model`,
-  `pending_external_master_fd`, `pending_container_title`,
-  `pending_container_icon`.
+  `pending_container_spawn` (`PendingContainerSpawn` ownership transaction),
+  `next_container_spawn_token`.
 - New methods: `containerModel`, `containerClient`,
-  `setPendingExternalMasterFd` / `takePendingExternalMasterFd`,
-  `setPendingContainerTabMetadata` /
-  `takePendingContainerTabTitle` / `takePendingContainerTabIcon`,
+  `allocContainerSpawnToken`, `setPendingContainerSpawn`,
+  `takePendingContainerMasterFd`, `takePendingContainerMetadata`,
+  `abortPendingContainerSpawn`,
   `startupContainerClient`, `resolveAgentPath`.
 - Startup hook to call `startupContainerClient` so the agent is
   reachable before any window opens.
 - New actions: `preferences`.
 - Smoke-test env hooks (`GHOSTTY_PTYXIS_TEST_*`).
-- Force-analysis comptime block listing all `ContainerClient` methods
-  we want eagerly analyzed.
+- Force-analysis comptime block listing all `ContainerClient` and
+  `PendingContainerSpawn` methods we want eagerly analyzed.
 
 **Why it can break:** upstream churns the actions array, the Private
 struct, the startup sequence, and Ghostty-action handlers all
@@ -149,9 +149,11 @@ the comptime block are leaf additions — keep them.
   `Application.containerModel` and sets it on both split buttons.
 - `spawnInContainerById` + `actionNewTabInContainer` + helpers
   (`PtsLibc` extern block, `smokeSpawnInContainer`).
-- After `performBindingAction(.new_tab)` in
-  `actionNewTabInContainer`, we apply the pending container title +
-  icon to the freshly-selected `Adw.TabPage`.
+- `actionNewTabInContainer` allocates a container spawn token, initiates
+  the spawn transaction with `errdefer compat_fd.close(master_fd)`,
+  and spawns the new tab page carrying `.container_spawn_token = token`.
+  After tab creation, pending container metadata is applied to the
+  freshly-selected `Adw.TabPage` and transaction resources are finalized.
 
 **Why it can break:** upstream redesigns the new-tab dropdown, the
 actions array, or the action wiring.
@@ -159,7 +161,7 @@ actions array, or the action wiring.
 **Resolution recipe:** new actions in the array are additions. The
 container-spawn logic is self-contained at the end of the file —
 move it as a block if upstream restructured. The
-`performBindingAction(.new_tab)` → `getSelectedPage` → setTitle/setIcon
+`newTabPage` → `getSelectedPage` → setTitle/setIcon
 sequence depends on `tab_view.setSelectedPage(page)` being called
 synchronously by `newTabPage` (line ~484 currently). If upstream makes
 new-tab async, this will need a signal handler on

@@ -233,6 +233,7 @@ pub const Tab = extern struct {
             .shell_integration = overrides.shell_integration,
             .working_directory = overrides.working_directory,
             .title = overrides.title,
+            .container_spawn_token = overrides.container_spawn_token,
         }) catch |err| switch (err) {
             error.OutOfMemory => {
                 // TODO: We should make our "no surfaces" state more aesthetically

@@ -223,6 +223,7 @@ pub const SplitTree = extern struct {
             .shell_integration = overrides.shell_integration,
             .working_directory = overrides.working_directory,
             .title = overrides.title,
+            .container_spawn_token = overrides.container_spawn_token,
         });
         defer surface.unref();
         _ = surface.refSink();
