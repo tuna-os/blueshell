@@ -26,6 +26,9 @@ env:
   # 0.16.0; the 0.15 toolchain fails every build with a version error).
   ZIG_VERSION: 0.16.0
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Unit + integration tests

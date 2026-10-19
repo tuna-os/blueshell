@@ -4,6 +4,9 @@ on:
     # Once a week
     - cron: "0 0 * * 0"
   workflow_dispatch:
+permissions:
+  contents: read
+
 jobs:
   update-iterm2-schemes:
     if: github.repository == 'ghostty-org/ghostty'

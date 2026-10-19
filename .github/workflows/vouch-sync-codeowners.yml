@@ -9,6 +9,9 @@ concurrency:
   group: vouch-manage
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   sync:
     runs-on: ubuntu-latest

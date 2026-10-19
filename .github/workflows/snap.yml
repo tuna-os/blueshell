@@ -12,6 +12,9 @@ on:
 
 name: Snap
 
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:

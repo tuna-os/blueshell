@@ -12,6 +12,9 @@ on:
 
 name: Flatpak
 
+permissions:
+  contents: read
+
 jobs:
   build:
     if: github.repository == 'ghostty-org/ghostty'

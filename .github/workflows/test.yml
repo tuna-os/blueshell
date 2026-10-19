@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name != 'main' && github.ref || github.run_id }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   # Determines whether other jobs should be skipped. Modify this if there
   # are other fast skip conditions, and add it as an output. Then modify
