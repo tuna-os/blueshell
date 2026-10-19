@@ -56,7 +56,7 @@ jobs:
     # own ghcr namespace, and -- if it also carried FLATPAK_INDEX_TOKEN --
     # would write an image nobody in the org built into the shared index.
     if: github.repository == 'tuna-os/blueshell'
-    uses: tuna-os/.github/.github/workflows/publish-flatpak.yml@main
+    uses: tuna-os/.github/.github/workflows/publish-flatpak.yml@d6c06c7745849388ed69e38ec846d1e86165a0a3
     with:
       app-id: com.mitchellh.ghostty
       manifest-path: flatpak/ghostty-stock/com.mitchellh.ghostty.yml
