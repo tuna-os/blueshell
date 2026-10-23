@@ -1,4 +1,4 @@
-name: upstream-sync
+name: upstream-sync # test-probe-omit
 
 # Attempts a weekly rebase of ptyxis-port onto ghostty-org/ghostty:main.
 #
