@@ -18,7 +18,7 @@ still just `~/.config/ghostty/config` underneath, and always editable).
 
 ![GNOME 47+](https://img.shields.io/badge/GNOME-47%2B-blue)
 ![Zig](https://img.shields.io/badge/Zig-0.15-f7a41d)
-![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-green)
+![License: MIT](https://img.shields.io/badge/License-MIT-blue)
 
 ## Features
 
@@ -107,7 +107,7 @@ upstream.
 
 ## License
 
-GPL-3.0-or-later — matching both upstream projects.
+MIT — matching upstream Ghostty (see [LICENSE](https://github.com/tuna-os/blueshell/blob/ptyxis-port/LICENSE)). Vendored components retain their respective upstream licenses (e.g. `third_party/ptyxis-agent` is GPL-3.0-or-later; see [`third_party/ptyxis-agent/PROVENANCE.md`](https://github.com/tuna-os/blueshell/blob/ptyxis-port/third_party/ptyxis-agent/PROVENANCE.md)).
 
 ## Related
 

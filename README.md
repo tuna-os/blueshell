@@ -218,4 +218,4 @@ Blueshell uses Ghostty's standard config format at `~/.config/ghostty/config`. A
 - **[Ptyxis](https://gitlab.gnome.org/chergert/ptyxis)** by Christian Hergert — UI design, container integration, palette collection, profile system design
 - **Blueshell** ports Ptyxis's UI into Ghostty's GTK apprt as Zig
 
-License: GPL-3.0-or-later (matching both upstream projects)
+License: MIT (matching upstream Ghostty; vendored `ptyxis-agent` is GPL-3.0-or-later — see [LICENSE](LICENSE) and [third_party/ptyxis-agent/PROVENANCE.md](third_party/ptyxis-agent/PROVENANCE.md))
