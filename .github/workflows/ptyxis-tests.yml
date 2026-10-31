@@ -92,6 +92,9 @@ jobs:
             src/config/theme.zig \
             src/termio/shell_integration.zig
 
+      - name: Check conflict hotspots map
+        run: bash scripts/check-conflict-hotspots.sh
+
       - name: Cache zig packages
         uses: actions/cache@v6
         with:

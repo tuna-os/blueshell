@@ -42,6 +42,10 @@ conflict, resolve using the recipe, and keep the file honest:
 - Drop a patch (e.g. it was upstreamed) → delete the entry in the same
   commit.
 
+`scripts/check-conflict-hotspots.sh` is the CI backstop for this: it
+diffs `HEAD` against the fork's base commit and fails if any upstream
+file modified by the fork diff is not listed in `CONFLICT_HOTSPOTS.md`.
+
 ### 3. Additions over modifications
 
 Fork code lives in **new files** wherever possible
