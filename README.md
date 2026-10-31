@@ -133,6 +133,9 @@ Only running instances are listed; a provider whose tool is missing is
 skipped silently. Enumeration happens at agent startup (restart the app to
 pick up new VMs).
 
+NSL is not currently supported; see the [NSL provider evaluation](docs/nsl-provider-evaluation.md)
+for the compatibility probe and remaining work.
+
 ---
 
 ## Profile system
