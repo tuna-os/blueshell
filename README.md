@@ -45,7 +45,16 @@ flatpak install tuna-os org.tunaos.blueshell
 ```
 
 Updates then arrive through normal `flatpak update`. Both x86_64 and aarch64
-are published, and every commit to `ptyxis-port` refreshes the remote. The app
+are published. Note that while OCI builds and rolling tip releases publish
+automatically on every commit to `ptyxis-port`, refreshing the live `tuna-os`
+remote index requires the repository secret `FLATPAK_INDEX_TOKEN` (a PAT with
+push access to `tuna-os/docs`). When the secret is unset (such as in forks or
+before maintainer provisioning), the publish workflow skips the index update
+and uploads a `blueshell-index-snippet` artifact; maintainers can then provision
+the secret and re-run, or manually merge the snippet's `Results` entry into
+`tuna-os/docs:static/flatpak/index/static` (see
+[.github/workflows/publish-flatpak.yml](.github/workflows/publish-flatpak.yml)
+and [docs/TUNA_OS_PROMOTION.md](docs/TUNA_OS_PROMOTION.md)). The app
 is listed on [tunaos.org](https://tunaos.org/) alongside the other TunaOS apps.
 
 ### Flatpak bundle — direct download
