@@ -17,6 +17,8 @@ permissions:
 
 jobs:
   build:
+    permissions:
+      actions: read # Download artifacts from another workflow run.
     strategy:
       fail-fast: false
       matrix:

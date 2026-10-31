@@ -24,6 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     name: Milestone Update
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
       - name: Set Milestone for PR
         uses: hustcer/milestone-action@2f38355153344ccaaa44b5b5fcff9f604dff1b45 # v3.2

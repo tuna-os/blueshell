@@ -19,6 +19,8 @@ jobs:
   build:
     if: github.repository == 'ghostty-org/ghostty'
     name: "Flatpak"
+    permissions:
+      actions: read # Download artifacts from another workflow run.
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-47
       options: --privileged
