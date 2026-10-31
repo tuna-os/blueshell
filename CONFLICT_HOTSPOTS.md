@@ -474,10 +474,23 @@ Ghostty flatpak packaging under `flatpak/ghostty-stock/`.
 
 ## `.github/workflows/clean-artifacts.yml` — LOW risk
 
-**What we changed:** Added `permissions: actions: write` to allow the
-artifact cleanup action to run.
+**What we changed:** Set workflow-level `permissions: contents: read` and
+granted `actions: write` only on the `remove-old-artifacts` job (#183) so the
+artifact cleanup action can run.
 
-**Resolution recipe:** Keep `actions: write` under permissions.
+**Resolution recipe:** Keep the read-only top-level block and the job-level
+`actions: write`.
+
+---
+
+## `.github/workflows/flatpak.yml` + `.github/workflows/publish-tag.yml` + `.github/workflows/snap.yml` — LOW risk
+
+**What we changed:** Added a top-level `permissions: contents: read` block
+(#163). The same block was added to most other inherited workflows listed
+here.
+
+**Resolution recipe:** Keep the top-level read-only `permissions` block when
+taking upstream changes to these workflows.
 
 ---
 

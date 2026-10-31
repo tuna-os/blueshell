@@ -93,7 +93,11 @@ jobs:
             src/termio/shell_integration.zig
 
       - name: Check conflict hotspots map
-        run: bash scripts/check-conflict-hotspots.sh
+        # The check diffs HEAD against the fork's upstream base commit, which
+        # the depth-1 checkout lacks; fetch commit/tree history only.
+        run: |
+          git fetch --quiet --unshallow --filter=blob:none origin
+          bash scripts/check-conflict-hotspots.sh
 
       - name: Cache zig packages
         uses: actions/cache@v6
