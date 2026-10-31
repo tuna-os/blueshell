@@ -49,6 +49,7 @@ const PtyxisContainer = @import("container_object.zig").Container;
 const PreferencesWindow = @import("preferences_window.zig").PreferencesWindow;
 const ProfileEditor = @import("profile_editor.zig").ProfileEditor;
 const palette_mod = @import("palette.zig");
+pub const PendingContainerSpawn = @import("container_spawn.zig").PendingContainerSpawn;
 
 comptime {
     _ = ContainerClient.spawn;
@@ -64,6 +65,9 @@ comptime {
     _ = ProfileEditor.new;
     _ = ProfileEditor.getGObjectType;
     _ = palette_mod.loadAll;
+    _ = PendingContainerSpawn.init;
+    _ = PendingContainerSpawn.deinit;
+    _ = PendingContainerSpawn.takeMasterFd;
 }
 const GlobalShortcuts = @import("global_shortcuts.zig").GlobalShortcuts;
 const OpenURI = @import("../portal.zig").OpenURI;
@@ -263,16 +267,10 @@ pub const Application = extern struct {
         container_client: ?ContainerClient = null,
         container_model: ?*gio.ListStore = null,
 
-        /// Set by the window's container-spawn path immediately before
-        /// performBindingAction(.new_tab). The next Surface to initialize
-        /// consumes this fd and adopts it instead of forking a child.
-        /// Cleared on consume so it never leaks into an unrelated surface.
-        pending_external_master_fd: ?c_int = null,
-
-        /// Display name + symbolic icon name to apply to the next tab
-        /// created during the container-spawn flow. Cleared on consume.
-        pending_container_title: ?[:0]const u8 = null,
-        pending_container_icon: ?[:0]const u8 = null,
+        /// Active container spawn transaction holding the master PTY fd,
+        /// tab title/icon metadata, and unique handoff token.
+        pending_container_spawn: ?PendingContainerSpawn = null,
+        next_container_spawn_token: u64 = 1,
 
         /// Active GLib timeout id for the debounced reload trigger.
         /// Slider drags can fire value-changed 30+ times/sec; debouncing
@@ -1697,54 +1695,78 @@ pub const Application = extern struct {
     }
 
     /// Stash a master_fd that the next Surface to initialize will adopt.
-    /// Used by the container-spawn path: the agent already created the
-    /// shell process, so the new Surface skips its own fork.
-    pub fn setPendingExternalMasterFd(self: *Self, fd: c_int) void {
-        self.private().pending_external_master_fd = fd;
-    }
-
-    /// Atomically read and clear the pending external master fd. Returns
-    /// null if no container spawn is in flight.
-    pub fn takePendingExternalMasterFd(self: *Self) ?c_int {
+    /// Allocate a fresh, unique token for an in-flight container spawn transaction.
+    pub fn allocContainerSpawnToken(self: *Self) u64 {
         const priv = self.private();
-        const fd = priv.pending_external_master_fd;
-        priv.pending_external_master_fd = null;
-        return fd;
-    }
-
-    /// Stash title + icon-name for the next tab created during the
-    /// container-spawn flow. Strings are dup'd with c_allocator. Either
-    /// argument may be empty to clear.
-    pub fn setPendingContainerTabMetadata(
-        self: *Self,
-        title: []const u8,
-        icon: []const u8,
-    ) void {
-        const priv = self.private();
-        if (priv.pending_container_title) |s| std.heap.c_allocator.free(s);
-        if (priv.pending_container_icon) |s| std.heap.c_allocator.free(s);
-        priv.pending_container_title = null;
-        priv.pending_container_icon = null;
-        if (title.len > 0) {
-            priv.pending_container_title = std.heap.c_allocator.dupeZ(u8, title) catch null;
+        const token = priv.next_container_spawn_token;
+        priv.next_container_spawn_token +%= 1;
+        if (priv.next_container_spawn_token == 0) {
+            priv.next_container_spawn_token = 1;
         }
-        if (icon.len > 0) {
-            priv.pending_container_icon = std.heap.c_allocator.dupeZ(u8, icon) catch null;
+        return token;
+    }
+
+    /// Set an active container spawn transaction. Any previously active
+    /// pending container spawn is cleaned up (closing its master fd and freeing strings)
+    /// to avoid descriptor leaks on supersession.
+    pub fn setPendingContainerSpawn(self: *Self, spawn: PendingContainerSpawn) void {
+        const priv = self.private();
+        if (priv.pending_container_spawn) |*existing| {
+            existing.deinit(std.heap.c_allocator);
         }
+        priv.pending_container_spawn = spawn;
     }
 
-    pub fn takePendingContainerTabTitle(self: *Self) ?[:0]const u8 {
+    /// Read and transfer ownership of the master_fd for a pending container spawn,
+    /// ONLY if the token matches. Returns null if token doesn't match or no spawn is active.
+    /// Does not deinit metadata or clear the transaction itself yet; takePendingContainerMetadata
+    /// consumes the metadata and cleans up the transaction.
+    pub fn takePendingContainerMasterFd(self: *Self, token: u64) ?c_int {
         const priv = self.private();
-        const t = priv.pending_container_title;
-        priv.pending_container_title = null;
-        return t;
+        if (priv.pending_container_spawn) |*spawn| {
+            if (spawn.token == token) {
+                return spawn.takeMasterFd();
+            }
+        }
+        return null;
     }
 
-    pub fn takePendingContainerTabIcon(self: *Self) ?[:0]const u8 {
+    pub const ContainerMetadata = struct {
+        title: ?[:0]const u8 = null,
+        icon: ?[:0]const u8 = null,
+    };
+
+    /// Consume metadata (title and icon) from the pending container spawn matching token.
+    /// If token matches, the metadata strings are transferred to the caller and the
+    /// transaction is removed from the application. Any untaken master_fd is closed.
+    pub fn takePendingContainerMetadata(self: *Self, token: u64) ?ContainerMetadata {
         const priv = self.private();
-        const i = priv.pending_container_icon;
-        priv.pending_container_icon = null;
-        return i;
+        if (priv.pending_container_spawn) |*spawn| {
+            if (spawn.token == token) {
+                const meta = ContainerMetadata{
+                    .title = spawn.title,
+                    .icon = spawn.icon,
+                };
+                spawn.title = null;
+                spawn.icon = null;
+                spawn.deinit(std.heap.c_allocator);
+                priv.pending_container_spawn = null;
+                return meta;
+            }
+        }
+        return null;
+    }
+
+    /// Discard and clean up any pending container spawn matching token.
+    /// Used if tab creation or adoption fails before completion.
+    pub fn abortPendingContainerSpawn(self: *Self, token: u64) void {
+        const priv = self.private();
+        if (priv.pending_container_spawn) |*spawn| {
+            if (spawn.token == token) {
+                spawn.deinit(std.heap.c_allocator);
+                priv.pending_container_spawn = null;
+            }
+        }
     }
 
     /// Trigger a config reload from any caller, debounced 300ms. The
@@ -1988,6 +2010,11 @@ pub const Application = extern struct {
         if (priv.bell_media) |v| {
             v.unref();
             priv.bell_media = null;
+        }
+
+        if (priv.pending_container_spawn) |*spawn| {
+            spawn.deinit(std.heap.c_allocator);
+            priv.pending_container_spawn = null;
         }
 
         gobject.Object.virtual_methods.dispose.call(

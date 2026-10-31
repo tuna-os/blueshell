@@ -15,12 +15,14 @@ command: ?configpkg.Command,
 shell_integration: ?configpkg.Config.ShellIntegration,
 working_directory: ?[:0]const u8,
 title: ?[:0]const u8,
+container_spawn_token: ?u64 = null,
 
 pub const none: Overrides = .{
     .command = null,
     .shell_integration = null,
     .working_directory = null,
     .title = null,
+    .container_spawn_token = null,
 };
 
 pub fn parse(arena_alloc: Allocator, arguments_it: *glib.VariantIter) ParseError!Overrides {
