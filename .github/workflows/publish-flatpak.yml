@@ -53,12 +53,12 @@ jobs:
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
       options: --privileged
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
       - name: Build
-        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
         with:
           manifest-path: ${{ env.MANIFEST }}
           cache-key: flatpak-publish-${{ github.sha }}-${{ matrix.arch }}
@@ -81,21 +81,21 @@ jobs:
           tar -C tarball-root/files -czf "blueshell-${{ matrix.arch }}.tar.gz" .
 
       - name: Upload OCI artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: blueshell-${{ matrix.arch }}-oci
           path: blueshell-${{ matrix.arch }}.oci/
           retention-days: 1
 
       - name: Upload bundle artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: blueshell-${{ matrix.arch }}-bundle
           path: blueshell-${{ matrix.arch }}.flatpak
           retention-days: 7
 
       - name: Upload tarball artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: blueshell-${{ matrix.arch }}-tarball
           path: blueshell-${{ matrix.arch }}.tar.gz
@@ -109,16 +109,16 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: blueshell-x86_64-oci
           # upload-artifact flattens a single-directory `path` to the artifact
           # root, so each arch must download into its own subdirectory.
           path: blueshell-x86_64.oci
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: blueshell-aarch64-oci
           path: blueshell-aarch64.oci
@@ -147,7 +147,7 @@ jobs:
           cat blueshell-index-snippet.json
 
       - name: Upload index snippet
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: blueshell-index-snippet
           path: blueshell-index-snippet.json
@@ -194,11 +194,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: "*-bundle"
           merge-multiple: true
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: "*-tarball"
           merge-multiple: true
@@ -221,13 +221,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: "*-bundle"
           merge-multiple: true
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: "*-tarball"
           merge-multiple: true
