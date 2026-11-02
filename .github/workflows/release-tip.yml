@@ -118,6 +118,9 @@ jobs:
           fi
 
   tag:
+    # This job pushes the tip tag; releases use the separate GH_RELEASE_TOKEN.
+    permissions:
+      contents: write
     runs-on: namespace-profile-ghostty-sm
     needs: [setup, build-macos]
     if: needs.setup.outputs.should_skip != 'true'
