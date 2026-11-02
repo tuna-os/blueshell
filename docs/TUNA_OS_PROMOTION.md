@@ -77,8 +77,8 @@ Per `tuna-os/flatpak-index` ("adding apps" flow):
 3. CI workflow `publish-flatpak.yml` — already committed here, copied
    from `tuna-os/finupdate` (the canonical tuna-os pipeline): native
    x86_64 + aarch64 OCI builds in the GNOME 50 container → skopeo push
-   to `ghcr.io/tuna-os/blueshell:latest-<arch>` → vendored
-   `.github/scripts/update-index.py` updates
+   to `ghcr.io/tuna-os/blueshell:latest-<arch>` → shared
+   `tuna-os/.github/.github/actions/update-flatpak-index` action updates
    `tuna-os/docs:static/flatpak/index/static` and pushes with
    `FLATPAK_INDEX_TOKEN`. Tags `v*` also attach .flatpak bundles to the
    GitHub release.
@@ -194,11 +194,10 @@ Being installable is not the finish line — the app must be discoverable:
   PR and cannot be a merge gate here. `ptyxis-tests` is the suite that
   actually runs. Either wire up equivalent runners or re-point those
   jobs at GitHub-hosted labels.
-- **`publish-flatpak.yml` is still a vendored copy** of the org
-  pipeline, including its own `update-index.py`, and is not covered by
-  `tuna-os/.github`'s drift check. Tracked in
-  tuna-os/blueshell#85; not urgent, because it carries a `release-tip`
-  job the reusable workflow has no equivalent for.
+- **`publish-flatpak.yml` keeps its own release orchestration** for
+  `release-tip`, FlatPark tarballs, and the token-optional index snippet.
+  Index generation uses the shared `update-flatpak-index` action, pinned
+  to an immutable revision with mandatory AppStream validation (#85).
 - **`ghcr.io/tuna-os/blueshell` has no plain `:latest` tag** — the
   vendored workflow pushes only `latest-<arch>`. Harmless (flatpak
   resolves through the index), but it makes a plain `docker pull` of
