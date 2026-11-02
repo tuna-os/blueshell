@@ -135,16 +135,26 @@ jobs:
           skopeo copy oci:blueshell-aarch64.oci \
             "docker://${IMAGE}:latest-aarch64"
 
-      - name: Generate index snippet (always)
-        run: |
-          for arch in x86_64 aarch64; do
-            python3 .github/scripts/update-index.py \
-              --oci-dir "blueshell-${arch}.oci" \
-              --index-file blueshell-index-snippet.json \
-              --repo-name "${{ github.repository_owner }}/blueshell" \
-              --tags latest
-          done
-          cat blueshell-index-snippet.json
+      - name: Generate index snippet (x86_64)
+        uses: tuna-os/.github/.github/actions/update-flatpak-index@fded0603d7e383990e8259141419fe6c1d641f41
+        with:
+          oci-dir: blueshell-x86_64.oci
+          index-file: blueshell-index-snippet.json
+          repo-name: ${{ github.repository_owner }}/blueshell
+          tags: latest
+          require-appstream: "true"
+
+      - name: Generate index snippet (aarch64)
+        uses: tuna-os/.github/.github/actions/update-flatpak-index@fded0603d7e383990e8259141419fe6c1d641f41
+        with:
+          oci-dir: blueshell-aarch64.oci
+          index-file: blueshell-index-snippet.json
+          repo-name: ${{ github.repository_owner }}/blueshell
+          tags: latest
+          require-appstream: "true"
+
+      - name: Show index snippet
+        run: cat blueshell-index-snippet.json
 
       - name: Upload index snippet
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -153,7 +163,8 @@ jobs:
           path: blueshell-index-snippet.json
           retention-days: 30
 
-      - name: Update central index (tuna-os/docs)
+      - name: Prepare central index (tuna-os/docs)
+        id: central-index
         env:
           FLATPAK_INDEX_TOKEN: ${{ secrets.FLATPAK_INDEX_TOKEN }}
         run: |
@@ -168,13 +179,31 @@ jobs:
           # Header-based auth so the token never lands in the remote URL.
           git -C index-repo config --local http.extraheader \
             "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FLATPAK_INDEX_TOKEN" | base64 -w0)"
-          for arch in x86_64 aarch64; do
-            python3 .github/scripts/update-index.py \
-              --oci-dir "blueshell-${arch}.oci" \
-              --index-file index-repo/static/flatpak/index/static \
-              --repo-name "${{ github.repository_owner }}/blueshell" \
-              --tags latest
-          done
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Update central index (x86_64)
+        if: steps.central-index.outputs.enabled == 'true'
+        uses: tuna-os/.github/.github/actions/update-flatpak-index@fded0603d7e383990e8259141419fe6c1d641f41
+        with:
+          oci-dir: blueshell-x86_64.oci
+          index-file: index-repo/static/flatpak/index/static
+          repo-name: ${{ github.repository_owner }}/blueshell
+          tags: latest
+          require-appstream: "true"
+
+      - name: Update central index (aarch64)
+        if: steps.central-index.outputs.enabled == 'true'
+        uses: tuna-os/.github/.github/actions/update-flatpak-index@fded0603d7e383990e8259141419fe6c1d641f41
+        with:
+          oci-dir: blueshell-aarch64.oci
+          index-file: index-repo/static/flatpak/index/static
+          repo-name: ${{ github.repository_owner }}/blueshell
+          tags: latest
+          require-appstream: "true"
+
+      - name: Publish central index
+        if: steps.central-index.outputs.enabled == 'true'
+        run: |
           cd index-repo
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
