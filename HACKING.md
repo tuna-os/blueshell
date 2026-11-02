@@ -17,7 +17,7 @@ Never post account credentials or API keys in issues or pull requests.
 
 ## Quick start (Fedora / Silverblue)
 
-Blueshell builds inside a Fedora 43 toolbox. The host needs Zig 0.15.x on PATH.
+Blueshell builds inside a Fedora 43 toolbox or natively on any Linux distribution with GTK4 and Libadwaita development libraries. The host needs Zig 0.16.x on PATH.
 
 ```sh
 # One-time: create the build toolbox
@@ -26,9 +26,9 @@ toolbox enter finupdate
 sudo dnf install blueprint-compiler gtk4-layer-shell-devel libadwaita-devel \
     meson gtk4-devel gobject-introspection-devel
 
-# Zig 0.15.x (run on the host — $HOME is shared)
-curl -L https://ziglang.org/download/0.15.0/zig-x86_64-linux-0.15.0.tar.xz | tar xJ -C ~/.local/
-ln -sf ~/.local/zig-x86_64-linux-0.15.0/zig ~/.local/bin/zig
+# Zig 0.16.x (run on the host — $HOME is shared)
+curl -L https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz | tar xJ -C ~/.local/
+ln -sf ~/.local/zig-x86_64-linux-0.16.0/zig ~/.local/bin/zig
 ```
 
 Build the GTK app:
@@ -45,6 +45,15 @@ toolbox run --container finupdate zig-out/bin/ghostty
 ```
 
 For release builds add `-Doptimize=ReleaseFast`.
+
+### Non-Fedora distributions
+
+For native builds outside of Fedora/Silverblue toolboxes:
+
+- Install the distribution-specific packages listed in [README.md](README.md#dependencies-by-distribution) (Ubuntu/Debian `apt`, Arch `pacman`, openSUSE `zypper`).
+- Ensure `blueprint-compiler` is version 0.16 or newer.
+- If your distribution does not package `gtk4-layer-shell`, build with `-fno-sys=gtk4-layer-shell` to compile the bundled version.
+- Build directly: `zig build -Dapp-runtime=gtk` (optionally `-fno-sys=gtk4-layer-shell`).
 
 ## Source layout (ptyxis-specific files)
 
