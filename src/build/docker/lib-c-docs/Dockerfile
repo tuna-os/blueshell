@@ -4,7 +4,7 @@
 # Base images are digest-pinned (blueshell#28): archlinux is a rolling
 # release and nginx:alpine floats — mutable refs make the same commit build
 # different images and let a bad :latest push silently change what ships.
-FROM --platform=linux/amd64 archlinux@sha256:dfc5be7be44cf1acf3d9b3b902e3e9c8a29f97ed41e35631823cdc9c97e5d4f0 AS builder
+FROM --platform=linux/amd64 archlinux@sha256:823e937464d1528b306a8e1137ef406b9c56e5fee43c7a19e93684d554af74e1 AS builder
 
 # Build argument for noindex header
 ARG ADD_NOINDEX_HEADER=false
