@@ -56,7 +56,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: tuna-os/.github/.github/workflows/publish-flatpak.yml@main
+    uses: tuna-os/.github/.github/workflows/publish-flatpak.yml@fded0603d7e383990e8259141419fe6c1d641f41 # tuna-os/.github main, 2026-10-31
     with:
       app-id: com.mitchellh.ghostty
       manifest-path: flatpak/ghostty-stock/com.mitchellh.ghostty.yml
