@@ -35,7 +35,7 @@ still just `~/.config/ghostty/config` underneath, and always editable).
 
 **TunaOS extras:**
 
-- **[Corral](https://github.com/tuna-os/corral) integration** — running corral VMs and containers appear as spawn targets (`corral ssh` / `corral ct console`), alongside opt-in Lima, LibVirt, Incus, Kubernetes, and KubeVirt providers (`BLUESHELL_VM_PROVIDERS=corral,…`)
+- **[Corral](https://github.com/tuna-os/corral) integration** — running corral VMs and containers appear as spawn targets (`corral ssh` / `corral ct console`), alongside opt-in Lima, LibVirt, Incus, Kubernetes, KubeVirt, and NSL providers (`BLUESHELL_VM_PROVIDERS=corral,nsl,…`)
 - **Profiles** — named snapshots of your full configuration with live switching and a per-profile editor (command, font, palette, opacity, cursor, scrollback, key compatibility)
 - **Preferences window** — palette picker (244 palettes from the Gogh collection), font, cursor, scrolling, bells, notifications, shell integration, active-keybinding list with capture-to-rebind
 - **Hamburger menu** — Ptyxis's theme swatches (system/light/dark) and zoom row

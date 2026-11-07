@@ -14,6 +14,7 @@
  *               sh -c 'exec corral ct console "$0"' NAME  (containers)
  *               take no command; the sh -c trick swallows the appended
  *               shell argv as unused positional parameters)
+ *   nsl         nsl run -m NAME --cd / -- <shell…>
  *
  * Providers are OFF by default. Opt in with a comma-separated list in
  * the BLUESHELL_VM_PROVIDERS environment variable, e.g.
@@ -537,6 +538,105 @@ blueshell_vm_providers_add_corral (GPtrArray *containers)
   add_corral_entries (containers, TRUE);
 }
 
+/* ---- NSL (frostyard/nsl VM manager): `nsl list --json` emits a JSON object
+ * with a `machines` array (ADR-0021), or a bare array of machine records.
+ * Igloo discovery and lifecycle semantics:
+ * - Usable states: running, stopped, starting, stopping.
+ *   Stopped machines are retained because entering them can start them.
+ * - Incomplete, removing, or unknown states are excluded.
+ * - Shell spawn executes `nsl run -m <name> --cd / -- <shell…>`.
+ * - Missing CLI or malformed JSON is silently ignored.
+ * - Duplicate names are ignored so only one container per machine is exported.
+ * ---- */
+
+void
+blueshell_vm_providers_add_nsl (GPtrArray *containers)
+{
+  g_autofree char *out = NULL;
+  g_autoptr(JsonParser) parser = NULL;
+  JsonNode *root_node;
+  JsonArray *machines = NULL;
+  g_autoptr(GHashTable) seen_names = NULL;
+  guint len;
+
+  if (!(out = run_host_capture ((const char * const []) { "nsl", "list", "--json", NULL })))
+    return;
+
+  if (out[0] == '\0')
+    return;
+
+  parser = json_parser_new ();
+  if (!json_parser_load_from_data (parser, out, -1, NULL))
+    return;
+
+  root_node = json_parser_get_root (parser);
+  if (root_node == NULL)
+    return;
+
+  if (JSON_NODE_HOLDS_OBJECT (root_node))
+    {
+      JsonObject *root_obj = json_node_get_object (root_node);
+      if (json_object_has_member (root_obj, "machines"))
+        machines = json_object_get_array_member (root_obj, "machines");
+    }
+  else if (JSON_NODE_HOLDS_ARRAY (root_node))
+    {
+      machines = json_node_get_array (root_node);
+    }
+
+  if (machines == NULL)
+    return;
+
+  seen_names = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+  len = json_array_get_length (machines);
+
+  for (guint i = 0; i < len; i++)
+    {
+      JsonObject *obj = json_array_get_object_element (machines, i);
+      const char *name;
+      const char *state;
+
+      if (obj == NULL || !json_object_has_member (obj, "name"))
+        continue;
+
+      name = json_object_get_string_member (obj, "name");
+      if (name == NULL || name[0] == '\0')
+        continue;
+
+      if (!json_object_has_member (obj, "state"))
+        continue;
+
+      state = json_object_get_string_member (obj, "state");
+      if (state == NULL)
+        continue;
+
+      /* Usable states per Igloo lifecycle semantics:
+       * running, stopped (entering starts them), starting, stopping.
+       * Exclude incomplete, removing, or unknown states. */
+      if (g_ascii_strcasecmp (state, "running") != 0 &&
+          g_ascii_strcasecmp (state, "stopped") != 0 &&
+          g_ascii_strcasecmp (state, "starting") != 0 &&
+          g_ascii_strcasecmp (state, "stopping") != 0)
+        continue;
+
+      /* Avoid stale duplicates if output reported the same machine twice */
+      if (g_hash_table_contains (seen_names, name))
+        continue;
+
+      g_hash_table_add (seen_names, g_strdup (name));
+
+      {
+        g_autofree char *id = g_strdup_printf ("nsl-%s", name);
+
+        g_ptr_array_add (containers,
+                         make_container (id, "nsl", name, "computer-symbolic",
+                                         (const char * const []) {
+                                           "nsl", "run", "-m", name, "--cd", "/", "--", NULL
+                                         }));
+      }
+    }
+}
+
 /* ---- Entry point ---- */
 
 typedef struct
@@ -553,6 +653,7 @@ static const VmProvider vm_providers[] = {
   { "kubernetes", "kubectl", blueshell_vm_providers_add_kubernetes },
   { "kubevirt", "virtctl", blueshell_vm_providers_add_kubevirt },
   { "corral", "corral", blueshell_vm_providers_add_corral },
+  { "nsl", "nsl", blueshell_vm_providers_add_nsl },
 };
 
 gboolean

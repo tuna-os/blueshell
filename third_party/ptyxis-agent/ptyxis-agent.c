@@ -161,7 +161,7 @@ ptyxis_agent_init (PtyxisAgent  *agent,
   ptyxis_agent_impl_add_provider (agent->impl, podman);
 
   /* Blueshell: opt-in VM/cluster spawn targets (lima, libvirt, incus,
-   * kubernetes, kubevirt) via BLUESHELL_VM_PROVIDERS. */
+   * kubernetes, kubevirt, corral, nsl) via BLUESHELL_VM_PROVIDERS. */
   {
     g_autoptr(GPtrArray) vm_containers =
       blueshell_vm_providers_enumerate (g_getenv ("BLUESHELL_VM_PROVIDERS"));
