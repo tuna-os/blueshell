@@ -117,7 +117,7 @@ menu. These are **off by default**; opt in with a comma list in
 `BLUESHELL_VM_PROVIDERS` (e.g. in `~/.profile`):
 
 ```sh
-export BLUESHELL_VM_PROVIDERS=lima,incus        # or: all
+export BLUESHELL_VM_PROVIDERS=lima,incus,nsl    # or: all
 ```
 
 | Provider | Needs on PATH | Opens a shell via |
@@ -128,13 +128,14 @@ export BLUESHELL_VM_PROVIDERS=lima,incus        # or: all
 | `kubernetes` | `kubectl` | `kubectl exec -it <pod> [-c <container>] --` (current context/namespace) |
 | `kubevirt` | `virtctl` + `kubectl` | `virtctl console -n <ns> <vmi>` |
 | `corral` | `corral` | VMs: `corral ssh <name>` · containers: `corral ct console <name>` ([tuna-os/corral](https://github.com/tuna-os/corral)) |
+| `nsl` | `nsl` | `nsl run -m <name> --cd / --` ([frostyard/nsl](https://github.com/frostyard/nsl)) |
 
 Only running instances are listed; a provider whose tool is missing is
 skipped silently. Enumeration happens at agent startup (restart the app to
 pick up new VMs).
 
-NSL is not currently supported; see the [NSL provider evaluation](docs/nsl-provider-evaluation.md)
-for the compatibility probe and remaining work.
+NSL is supported as an opt-in provider (`BLUESHELL_VM_PROVIDERS=nsl`); see the [NSL provider evaluation](docs/nsl-provider-evaluation.md)
+for architecture, lifecycle semantics, and verification details.
 
 ---
 

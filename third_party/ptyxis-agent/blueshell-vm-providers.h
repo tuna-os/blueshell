@@ -1,7 +1,7 @@
 /* blueshell-vm-providers.h
  *
  * Blueshell addition: VM/cluster spawn targets (Lima, LibVirt, Incus,
- * Kubernetes, KubeVirt). See blueshell-vm-providers.c for design notes.
+ * Kubernetes, KubeVirt, Corral, NSL). See blueshell-vm-providers.c for design notes.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -30,5 +30,6 @@ void blueshell_vm_providers_add_incus      (GPtrArray *containers);
 void blueshell_vm_providers_add_kubernetes (GPtrArray *containers);
 void blueshell_vm_providers_add_kubevirt   (GPtrArray *containers);
 void blueshell_vm_providers_add_corral     (GPtrArray *containers);
+void blueshell_vm_providers_add_nsl        (GPtrArray *containers);
 
 G_END_DECLS

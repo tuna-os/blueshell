@@ -71,6 +71,9 @@ test_enabled_parsing (void)
   g_assert_true (blueshell_vm_provider_is_enabled ("lima", "lima"));
   g_assert_true (blueshell_vm_provider_is_enabled ("lima", "incus, lima"));
   g_assert_true (blueshell_vm_provider_is_enabled ("kubevirt", "all"));
+  g_assert_false (blueshell_vm_provider_is_enabled ("nsl", "lima"));
+  g_assert_true (blueshell_vm_provider_is_enabled ("nsl", "nsl"));
+  g_assert_true (blueshell_vm_provider_is_enabled ("nsl", "corral, nsl"));
 }
 
 static void
@@ -232,6 +235,110 @@ test_corral_json (void)
 }
 
 static void
+test_nsl (void)
+{
+  g_autoptr(GPtrArray) containers = g_ptr_array_new_with_free_func (g_object_unref);
+  PtyxisIpcContainer *c;
+
+  write_shim ("nsl",
+              "#!/bin/sh\n"
+              "case \"$*\" in\n"
+              "*list*--json*) printf '%s' '{\"machines\":['"
+              "{\"name\":\"dev-box\",\"state\":\"running\",\"tier\":\"shared\"},"
+              "{\"name\":\"dormant-box\",\"state\":\"stopped\"},"
+              "{\"name\":\"booting-box\",\"state\":\"starting\"},"
+              "{\"name\":\"halting-box\",\"state\":\"stopping\"},"
+              "{\"name\":\"broken-box\",\"state\":\"incomplete\"},"
+              "{\"name\":\"dying-box\",\"state\":\"removing\"},"
+              "{\"name\":\"unknown-box\",\"state\":\"custom\"}"
+              "]}' ;;\n"
+              "esac\n");
+
+  blueshell_vm_providers_add_nsl (containers);
+
+  g_assert_cmpuint (containers->len, ==, 4);
+
+  c = find_container (containers, "nsl-dev-box");
+  g_assert_nonnull (c);
+  g_assert_cmpstr (ptyxis_ipc_container_get_provider (c), ==, "nsl");
+  g_assert_cmpstr (ptyxis_ipc_container_get_display_name (c), ==, "dev-box");
+  g_assert_cmpstr (ptyxis_ipc_container_get_icon_name (c), ==, "computer-symbolic");
+
+  c = find_container (containers, "nsl-dormant-box");
+  g_assert_nonnull (c);
+  g_assert_cmpstr (ptyxis_ipc_container_get_provider (c), ==, "nsl");
+  g_assert_cmpstr (ptyxis_ipc_container_get_display_name (c), ==, "dormant-box");
+
+  c = find_container (containers, "nsl-booting-box");
+  g_assert_nonnull (c);
+  g_assert_cmpstr (ptyxis_ipc_container_get_display_name (c), ==, "booting-box");
+
+  c = find_container (containers, "nsl-halting-box");
+  g_assert_nonnull (c);
+  g_assert_cmpstr (ptyxis_ipc_container_get_display_name (c), ==, "halting-box");
+
+  /* Excluded incomplete, removing, and unknown states */
+  g_assert_null (find_container (containers, "nsl-broken-box"));
+  g_assert_null (find_container (containers, "nsl-dying-box"));
+  g_assert_null (find_container (containers, "nsl-unknown-box"));
+}
+
+static void
+test_nsl_bare_array (void)
+{
+  g_autoptr(GPtrArray) containers = g_ptr_array_new_with_free_func (g_object_unref);
+  PtyxisIpcContainer *c;
+
+  write_shim ("nsl",
+              "#!/bin/sh\n"
+              "case \"$*\" in\n"
+              "*list*--json*) printf '%s' '[{\"name\":\"array-box\",\"state\":\"Running\"}]' ;;\n"
+              "esac\n");
+
+  blueshell_vm_providers_add_nsl (containers);
+
+  g_assert_cmpuint (containers->len, ==, 1);
+  c = find_container (containers, "nsl-array-box");
+  g_assert_nonnull (c);
+  g_assert_cmpstr (ptyxis_ipc_container_get_display_name (c), ==, "array-box");
+}
+
+static void
+test_nsl_duplicate_names (void)
+{
+  g_autoptr(GPtrArray) containers = g_ptr_array_new_with_free_func (g_object_unref);
+
+  write_shim ("nsl",
+              "#!/bin/sh\n"
+              "case \"$*\" in\n"
+              "*list*--json*) printf '%s' '{\"machines\":['"
+              "{\"name\":\"same-box\",\"state\":\"running\"},"
+              "{\"name\":\"same-box\",\"state\":\"stopped\"}"
+              "]}' ;;\n"
+              "esac\n");
+
+  blueshell_vm_providers_add_nsl (containers);
+
+  g_assert_cmpuint (containers->len, ==, 1);
+  g_assert_nonnull (find_container (containers, "nsl-same-box"));
+}
+
+static void
+test_nsl_invalid_json (void)
+{
+  g_autoptr(GPtrArray) containers = g_ptr_array_new_with_free_func (g_object_unref);
+
+  write_shim ("nsl",
+              "#!/bin/sh\n"
+              "case \"$*\" in\n"
+              "*list*--json*) printf '%s' 'not-json' ;;\n"
+              "esac\n");
+
+  blueshell_vm_providers_add_nsl (containers);
+  g_assert_cmpuint (containers->len, ==, 0);
+}
+
+static void
 test_enumerate_respects_env (void)
 {
   /* Only lima enabled: incus shim exists but must not be consulted. */
@@ -239,6 +346,13 @@ test_enumerate_respects_env (void)
 
   g_assert_nonnull (find_container (containers, "lima-default"));
   g_assert_null (find_container (containers, "incus-web"));
+
+  /* nsl enabled via env */
+  {
+    g_autoptr(GPtrArray) nsl_only = blueshell_vm_providers_enumerate ("nsl");
+    g_assert_nonnull (find_container (nsl_only, "nsl-dev-box"));
+    g_assert_null (find_container (nsl_only, "lima-default"));
+  }
 
   /* Nothing enabled → nothing listed. */
   {
@@ -272,6 +386,10 @@ main (int    argc,
   g_test_add_func ("/vm-providers/corral", test_corral);
   g_test_add_func ("/vm-providers/corral-json", test_corral_json);
   g_test_add_func ("/vm-providers/enumerate-env", test_enumerate_respects_env);
+  g_test_add_func ("/vm-providers/nsl", test_nsl);
+  g_test_add_func ("/vm-providers/nsl-bare-array", test_nsl_bare_array);
+  g_test_add_func ("/vm-providers/nsl-duplicates", test_nsl_duplicate_names);
+  g_test_add_func ("/vm-providers/nsl-invalid-json", test_nsl_invalid_json);
 
   return g_test_run ();
 }

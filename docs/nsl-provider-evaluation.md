@@ -1,9 +1,9 @@
 # NSL terminal provider evaluation
 
-Status: **not implemented**. This is a compatibility investigation for
-[#182](https://github.com/tuna-os/blueshell/issues/182), not evidence that
-BlueShell supports NSL. A live NSL machine and both native and Flatpak UI paths
-still need to be tested before shipping a provider.
+Status: **implemented (opt-in)**. NSL is integrated as an optional terminal
+provider in `third_party/ptyxis-agent/blueshell-vm-providers.c` using Igloo's
+discovery and lifecycle semantics (`BLUESHELL_VM_PROVIDERS=nsl`), closing
+[#182](https://github.com/tuna-os/blueshell/issues/182).
 
 ## Initial probe
 
@@ -68,6 +68,35 @@ explicit handling, not merely a command prefix. `NSL_HOME` defaults to
 created after startup and sandbox visibility; they are notifications to reload,
 not the authoritative machine list.
 
+
+## Implemented provider architecture
+
+The NSL provider is implemented in `third_party/ptyxis-agent/blueshell-vm-providers.c`
+following BlueShell's existing opt-in provider architecture:
+
+- **Discovery**: `blueshell_vm_providers_add_nsl()` queries `nsl list --json`
+  via `run_host_capture()`, which automatically handles sandbox escaping to
+  the host when running inside Flatpak.
+- **Format parsing**: Parses JSON adhering to NSL ADR-0021 (object with a `machines`
+  array) as well as direct array responses. Malformed JSON or absent output is
+  safely ignored without affecting other providers.
+- **Lifecycle states**: Adopts Igloo's lifecycle semantics:
+  - **Usable states included**: `running`, `stopped` (retained because entering starts
+    the machine), `starting`, and `stopping`.
+  - **Unusable states excluded**: `incomplete`, `removing`, and any unknown/malformed states.
+- **Object identity and deduplication**: Containers are exported with stable ID
+  `nsl-<name>`, provider `"nsl"`, display name `<name>`, and icon `"computer-symbolic"`.
+  Duplicate entries in the machine inventory are tracked and ignored.
+- **Spawn execution**: Spawns terminal sessions using command prefix:
+  `nsl run -m <name> --cd / -- <shell…>`.
+  The `--cd /` flag ensures a predictable working directory inside the VM,
+  avoiding failures if the host directory is unmounted in isolated tiers.
+- **Opt-in control**: Enabled by listing `nsl` (or `all`) in the `BLUESHELL_VM_PROVIDERS`
+  environment variable. Absent CLI tool on PATH causes the provider to be silently
+  skipped.
+- **Unit tests**: `third_party/ptyxis-agent/test-vm-providers.c` provides coverage
+  for standard discovery, lifecycle state filtering, bare arrays, duplicate name
+  deduplication, malformed JSON resilience, and environment variable parsing.
 ## BlueShell integration assessment
 
 - `third_party/ptyxis-agent/blueshell-vm-providers.c` and its only production
