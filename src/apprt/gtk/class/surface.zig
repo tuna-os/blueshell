@@ -1786,7 +1786,7 @@ pub const Surface = extern struct {
         };
 
         const t = switch (title.len) {
-            0 => "Ghostty",
+            0 => "Blueshell",
             else => title,
         };
 
@@ -1794,7 +1794,7 @@ pub const Surface = extern struct {
         defer notification.unref();
         notification.setBody(body);
 
-        const icon = gio.ThemedIcon.new("com.mitchellh.ghostty");
+        const icon = gio.ThemedIcon.new("org.tunaos.blueshell");
         defer icon.unref();
         notification.setIcon(icon.as(gio.Icon));
 
