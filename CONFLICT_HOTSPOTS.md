@@ -99,6 +99,8 @@ implementation.
 **What we added:** `externalMasterFd` calls
 `Application.default().takePendingExternalMasterFd()`. Foreground-agent
 detection also reads the PTY master directly from the adopt backend.
+`sendDesktopNotification` defaults an empty title to `"Blueshell"` and
+uses `"org.tunaos.blueshell"` as the notification icon.
 
 ---
 
