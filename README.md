@@ -75,13 +75,36 @@ flatpak-builder --install --user build-dir flatpak/org.tunaos.blueshell.yml
 
 ### Build from source
 
-Requires Zig 0.15.x and the GTK/Libadwaita development stack. On Fedora 43+:
+Requires Zig 0.16.x (or the minimum version declared in `build.zig.zon`) and the GTK4/Libadwaita development stack.
+
+#### Dependencies by distribution
+
+**Fedora 43+:**
+```sh
+sudo dnf install blueprint-compiler gtk4-layer-shell-devel libadwaita-devel meson
+```
+
+**Ubuntu / Debian:**
+```sh
+sudo apt install libgtk-4-dev libadwaita-1-dev blueprint-compiler meson gettext libxml2-utils
+```
+*Note for Ubuntu/Debian:* If `libgtk4-layer-shell-dev` is not packaged in your release (e.g. Ubuntu 24.04), add `-fno-sys=gtk4-layer-shell` to the `zig build` command to build the vendored copy. Also ensure `blueprint-compiler` is version 0.16 or newer (on older distros, clone from upstream or install via pip/flatpak).
+
+**Arch Linux:**
+```sh
+sudo pacman -S gtk4 gtk4-layer-shell libadwaita blueprint-compiler meson
+```
+
+**openSUSE (Tumbleweed / Leap):**
+```sh
+sudo zypper install gtk4-devel libadwaita-devel blueprint-compiler meson
+```
+*Note for openSUSE:* If `gtk4-layer-shell-devel` is unavailable (e.g. on Leap), pass `-fno-sys=gtk4-layer-shell` to `zig build`.
+
+#### Building
 
 ```sh
-# Inside a toolbox or on the host:
-sudo dnf install blueprint-compiler gtk4-layer-shell-devel libadwaita-devel meson
-
-# Download Zig 0.15.x from https://ziglang.org/download/ and put on PATH
+# Download Zig 0.16.x from https://ziglang.org/download/ and put on PATH
 
 git clone https://github.com/tuna-os/blueshell
 cd blueshell
