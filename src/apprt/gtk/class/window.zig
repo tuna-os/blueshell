@@ -2730,7 +2730,7 @@ pub const Window = extern struct {
             try self.alloc().dupeZ(u8, icon_name)
         else
             null;
-        errdefer if (icon_copy) |i| self.alloc().free(i);
+        errdefer if (icon_copy) |icon| self.alloc().free(icon);
 
         // Stash the owned transaction on Application with the token.
         // Surface will adopt the master_fd only if its token matches.
