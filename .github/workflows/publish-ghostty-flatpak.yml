@@ -51,7 +51,12 @@ jobs:
     # Forks don't publish. A fork running this on dispatch would push to its
     # own ghcr namespace, and -- if it also carried FLATPAK_INDEX_TOKEN --
     # would write an image nobody in the org built into the shared index.
-    if: github.repository == 'tuna-os/blueshell'
+    # NOTE: `github.repository` is always the base repo, even for fork PRs,
+    # so compare the PR head repo instead. Secrets forwarded via
+    # `secrets: inherit` (e.g. FLATPAK_INDEX_TOKEN, required by the called
+    # workflow) are unavailable on cross-repo PRs, which would otherwise
+    # fail here instead of skipping.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # The called workflow requires both permissions, including on PR runs.
     permissions:
       contents: write
