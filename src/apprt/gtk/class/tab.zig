@@ -582,7 +582,7 @@ pub const Tab = extern struct {
         // A non-null tab_prefix (Ptyxis-style) is prepended UNLESS a
         // tab_override is present (override fully replaces).
         const plain = plain: {
-            const default = "Ghostty";
+            const default = "Blueshell";
             const config_title: ?[*:0]const u8 = title: {
                 const config = config_ orelse break :title null;
                 break :title config.get().title orelse null;

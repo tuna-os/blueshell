@@ -1762,7 +1762,7 @@ pub const Window = extern struct {
     ) callconv(.c) ?[*:0]const u8 {
         if (title_override_) |v| return glib.ext.dupeZ(u8, std.mem.span(v));
         if (title_) |v| return glib.ext.dupeZ(u8, std.mem.span(v));
-        return glib.ext.dupeZ(u8, "Ghostty");
+        return glib.ext.dupeZ(u8, "Blueshell");
     }
 
     fn closureSubtitle(
