@@ -2717,19 +2717,20 @@ pub const Window = extern struct {
 
         log.info("Container.Spawn ok: proc_path={s}", .{proc_path});
 
-        // Duplicate metadata strings for the transaction
-        const alloc = std.heap.c_allocator;
+        // Duplicate metadata strings for the transaction. NOTE: do not
+        // introduce a local named `alloc` here: it would shadow the
+        // surrounding type's `alloc` method (Zig rejects the shadowing).
         const title_copy = if (display_name.len > 0)
-            try alloc.dupeZ(u8, display_name)
+            try self.alloc().dupeZ(u8, display_name)
         else
             null;
-        errdefer if (title_copy) |t| alloc.free(t);
+        errdefer if (title_copy) |t| self.alloc().free(t);
 
         const icon_copy = if (icon_name.len > 0)
-            try alloc.dupeZ(u8, icon_name)
+            try self.alloc().dupeZ(u8, icon_name)
         else
             null;
-        errdefer if (icon_copy) |i| alloc.free(i);
+        errdefer if (icon_copy) |i| self.alloc().free(i);
 
         // Stash the owned transaction on Application with the token.
         // Surface will adopt the master_fd only if its token matches.
