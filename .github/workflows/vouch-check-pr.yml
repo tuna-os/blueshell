@@ -13,6 +13,10 @@ permissions:
 
 jobs:
   check:
+    # Skip gracefully when the Vouch GitHub App is not configured in this
+    # fork/org (secrets missing). Without this guard every PR fails with
+    # "client-id must be set to a non-empty string" and blocks merging.
+    if: secrets.VOUCH_APP_ID != '' && secrets.VOUCH_APP_PRIVATE_KEY != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

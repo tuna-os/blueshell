@@ -14,6 +14,9 @@ permissions:
 
 jobs:
   sync:
+    # Skip gracefully when the Vouch GitHub App is not configured in this
+    # fork/org (secrets missing).
+    if: secrets.VOUCH_APP_ID != '' && secrets.VOUCH_APP_PRIVATE_KEY != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
