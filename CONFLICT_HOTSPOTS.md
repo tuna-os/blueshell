@@ -562,6 +562,62 @@ action versions.
 concurrency, and updated action pins.
 ---
 
+## `src/apprt/gtk/class/Overrides.zig` — MEDIUM risk
+
+**What we added:** `container_spawn_token: ?u64 = null` plus its entry
+in `Overrides.none` (#174). The token hands a freshly created surface
+the claim to a stashed container-spawn transaction (master fd and
+title/icon metadata).
+
+**Why it can break:** upstream changes the `Overrides` fields, the
+`parse` function, or any `newTabPage` call site — every `Overrides`
+literal must keep compiling, and new call sites that should carry a
+spawn token need the field threaded through.
+
+**Resolution recipe:** keep the `container_spawn_token` field and its
+`none` entry; thread it through any new `Overrides` literals or
+`newTabPage`/`newTabForWindow` call sites upstream adds.
+
+---
+
+## `src/apprt/gtk/class/split_tree.zig` — MEDIUM risk
+
+**What we added:** pass `.container_spawn_token` through when creating
+the surface (#174), so splits of a container-spawned tab keep the token.
+
+**Why it can break:** upstream refactors surface creation in `SplitTree`.
+
+**Resolution recipe:** keep the field passthrough alongside the other
+`overrides.*` fields.
+
+---
+
+## `src/main_ghostty.zig` — LOW risk
+
+**What we added:** import `WorkerLifecycle` in the `test` block (#187).
+
+**Why it can break:** upstream renames test files or reshuffles the
+test block.
+
+**Resolution recipe:** keep the import; drop it if upstream absorbs the
+worker-lifecycle tests.
+
+---
+
+## `.github/pinact.yml` — LOW risk
+
+**What we changed:** removed the `ignore_actions` exception for
+`DeterminateSystems/nix-installer-action`, so pinact pins it like every
+other action (#188).
+
+**Why it can break:** upstream edits `pinact.yml`.
+
+**Resolution recipe:** keep the exception removed; resolve any pin-SHA
+drift by re-running pinact. (Workflow files' place in this map is
+otherwise still open — see issue #55.)
+
+---
+
 ## Files we DON'T touch (assert this on rebase)
 
 - `src/main.zig`
