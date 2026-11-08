@@ -13,20 +13,25 @@ permissions:
 
 jobs:
   check:
-    # Skip gracefully when the Vouch GitHub App is not configured in this
-    # fork/org (secrets missing). Without this guard every PR fails with
-    # "client-id must be set to a non-empty string" and blocks merging.
-    if: secrets.VOUCH_APP_ID != '' && secrets.VOUCH_APP_PRIVATE_KEY != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # `secrets` cannot be referenced in `if:` conditions at all, so mirror
+    # the app credentials into env first: empty env means "not configured".
+    # Without this guard every run fails in create-github-app-token with
+    # "client-id must be set to a non-empty string".
+    env:
+      VOUCH_APP_ID: ${{ secrets.VOUCH_APP_ID }}
+      VOUCH_APP_PRIVATE_KEY: ${{ secrets.VOUCH_APP_PRIVATE_KEY }}
     steps:
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
+        if: env.VOUCH_APP_ID != '' && env.VOUCH_APP_PRIVATE_KEY != ''
         with:
-          app-id: ${{ secrets.VOUCH_APP_ID }}
-          private-key: ${{ secrets.VOUCH_APP_PRIVATE_KEY }}
+          app-id: ${{ env.VOUCH_APP_ID }}
+          private-key: ${{ env.VOUCH_APP_PRIVATE_KEY }}
 
       - uses: mitchellh/vouch/action/check-pr@d66fa29a64600490892131ad87597c30c91fcac4 # v1.5.0
+        if: steps.app-token.outputs.token != ''
         with:
           pr-number: ${{ github.event.pull_request.number }}
           auto-close: true
