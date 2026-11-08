@@ -755,6 +755,8 @@ pub const Surface = extern struct {
             pub const none: @This() = .{};
         } = .none,
 
+        container_spawn_token: ?u64 = null,
+
         pub var offset: c_int = 0;
     };
 
@@ -764,6 +766,7 @@ pub const Surface = extern struct {
         });
         const alloc = Application.default().allocator();
         const priv: *Private = self.private();
+        priv.container_spawn_token = overrides.container_spawn_token;
         priv.overrides = .{
             .command = if (overrides.command) |c| c.clone(alloc) catch null else null,
             .shell_integration = overrides.shell_integration,
@@ -1612,10 +1615,15 @@ pub const Surface = extern struct {
     }
 
     /// Return a master_fd to adopt for this surface's pty if one was
-    /// stashed on Application (e.g. ptyxis-agent container spawn). One
-    /// shot — the stash is cleared on read.
-    pub fn externalMasterFd(_: *Self) ?c_int {
-        return Application.default().takePendingExternalMasterFd();
+    /// stashed on Application (e.g. ptyxis-agent container spawn) and
+    /// the token matches this surface's requested container spawn transaction.
+    /// One shot — the master_fd ownership is transferred to the caller and
+    /// cleared from the application stash.
+    pub fn externalMasterFd(self: *Self) ?c_int {
+        const priv = self.private();
+        const token = priv.container_spawn_token orelse return null;
+        priv.container_spawn_token = null;
+        return Application.default().takePendingContainerMasterFd(token);
     }
 
     pub fn defaultTermioEnv(self: *Self) !std.process.Environ.Map {
