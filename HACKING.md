@@ -57,6 +57,9 @@ For native builds outside of Fedora/Silverblue toolboxes:
 
 ## Source layout (ptyxis-specific files)
 
+For a source comparison with KDE's Ghostty-based terminal and proposed
+integration checks, see [What Blueshell can learn from Kwi](docs/KWI_FINDINGS.md).
+
 All Ptyxis UI code lives under `src/apprt/gtk/`:
 
 | Path | Purpose |
