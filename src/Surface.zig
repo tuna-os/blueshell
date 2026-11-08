@@ -38,6 +38,7 @@ const internal_os = @import("os/main.zig");
 const inspectorpkg = @import("inspector/main.zig");
 const SurfaceMouse = @import("surface_mouse.zig");
 const ProcessInfo = @import("pty.zig").ProcessInfo;
+const WorkerLifecycle = @import("WorkerLifecycle.zig");
 
 const log = std.log.scoped(.surface);
 
@@ -98,8 +99,8 @@ renderer_state: rendererpkg.State,
 /// The renderer thread manager
 renderer_thread: rendererpkg.Thread,
 
-/// The actual thread
-renderer_thr: std.Thread,
+/// Owner-thread lifecycle for the renderer worker.
+renderer_worker: WorkerLifecycle = .{},
 
 /// Mouse state.
 mouse: Mouse,
@@ -133,7 +134,7 @@ last_binding_trigger: u64 = 0,
 /// The terminal IO handler.
 io: termio.Termio,
 io_thread: termio.Thread,
-io_thr: std.Thread,
+io_worker: WorkerLifecycle = .{},
 
 /// Terminal inspector
 inspector: ?*inspectorpkg.Inspector = null,
@@ -209,19 +210,10 @@ pub const InputEffect = enum {
 /// The search state for the surface.
 const Search = struct {
     state: terminal.search.Thread,
-    thread: std.Thread,
+    worker: WorkerLifecycle = .{},
 
     pub fn deinit(self: *Search) void {
-        // Notify the thread to stop
-        self.state.stop.notify() catch |err| log.err(
-            "error notifying search thread to stop, may stall err={}",
-            .{err},
-        );
-
-        // Wait for the OS thread to quit
-        self.thread.join();
-
-        // Now it is safe to deinit the state
+        self.worker.shutdown(&self.state.stop, "search");
         self.state.deinit();
     }
 };
@@ -626,12 +618,10 @@ pub fn init(
             .mutex = mutex,
             .terminal = &self.io.terminal,
         },
-        .renderer_thr = undefined,
         .mouse = .{},
         .keyboard = .{},
         .io = undefined,
         .io_thread = io_thread,
-        .io_thr = undefined,
         .size = size,
         .config = derived_config,
 
@@ -749,21 +739,21 @@ pub fn init(
     // to duplicate.
     try self.resize(self.size.screen);
 
-    // Start our renderer thread
-    self.renderer_thr = try std.Thread.spawn(
-        .{},
+    // Roll back all successfully started workers before any of their shared
+    // state is destroyed, even if a later spawn or surface action fails.
+    errdefer self.shutdownWorkers();
+
+    const renderer_thr = try self.renderer_worker.start(
         rendererpkg.Thread.threadMain,
         .{&self.renderer_thread},
     );
-    self.renderer_thr.setName(global.io(), "renderer") catch {};
+    renderer_thr.setName(global.io(), "renderer") catch {};
 
-    // Start our IO thread
-    self.io_thr = try std.Thread.spawn(
-        .{},
+    const io_thr = try self.io_worker.start(
         termio.Thread.threadMain,
         .{ &self.io_thread, &self.io },
     );
-    self.io_thr.setName(global.io(), "io") catch {};
+    io_thr.setName(global.io(), "io") catch {};
 
     // Determine our initial window size if configured. We need to do this
     // quite late in the process because our height/width are in grid dimensions,
@@ -825,23 +815,18 @@ pub fn init(
     app.first = false;
 }
 
-pub fn deinit(self: *Surface) void {
-    // Stop search thread
+/// Called on the surface owner thread without holding the renderer mutex.
+/// Search callbacks can send renderer messages, so join search first. Keep the
+/// existing renderer-before-IO order until their mailbox shutdown is redesigned.
+fn shutdownWorkers(self: *Surface) void {
     if (self.search) |*s| s.deinit();
+    self.search = null;
+    self.renderer_worker.shutdown(&self.renderer_thread.stop, "renderer");
+    self.io_worker.shutdown(&self.io_thread.stop, "io");
+}
 
-    // Stop rendering thread
-    {
-        self.renderer_thread.stop.notify() catch |err|
-            log.err("error notifying renderer thread to stop, may stall err={}", .{err});
-        self.renderer_thr.join();
-    }
-
-    // Stop our IO thread
-    {
-        self.io_thread.stop.notify() catch |err|
-            log.err("error notifying io thread to stop, may stall err={}", .{err});
-        self.io_thr.join();
-    }
+pub fn deinit(self: *Surface) void {
+    self.shutdownWorkers();
 
     // We need to deinit AFTER everything is stopped, since there are
     // shared values between the two threads.
@@ -5112,17 +5097,18 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
                         .event_cb = &searchCallback,
                         .event_userdata = self,
                     }),
-                    .thread = undefined,
                 };
                 const s: *Search = &self.search.?;
-                errdefer s.state.deinit();
+                errdefer {
+                    s.state.deinit();
+                    self.search = null;
+                }
 
-                s.thread = try .spawn(
-                    .{},
+                const thread = try s.worker.start(
                     terminal.search.Thread.threadMain,
                     .{&s.state},
                 );
-                s.thread.setName(global.io(), "search") catch {};
+                thread.setName(global.io(), "search") catch {};
 
                 break :init s;
             };
