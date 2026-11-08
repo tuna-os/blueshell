@@ -2567,8 +2567,15 @@ pub const Window = extern struct {
 
         // Create the new tab page with overrides carrying the container_spawn_token.
         // This ensures ONLY the freshly created surface for this tab can claim the master fd.
+        // The remaining fields are explicitly null (same as Overrides.none):
+        // a container tab inherits command/shell/workdir/title from config
+        // and metadata, not from action overrides.
         const parent_surface = if (self.getActiveSurface()) |v| v.core() else null;
         _ = self.newTabPage(parent_surface, .tab, .{
+            .command = null,
+            .shell_integration = null,
+            .working_directory = null,
+            .title = null,
             .container_spawn_token = token,
         });
 
