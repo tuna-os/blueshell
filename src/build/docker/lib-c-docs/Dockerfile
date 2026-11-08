@@ -27,7 +27,7 @@ RUN doxygen
 #--------------------------------------------------------------------
 # Host the static HTML
 #--------------------------------------------------------------------
-FROM nginx@sha256:8e0328743c8e52ead9fac9c198d0893d63cd38e41b1d9ea629e092a8ac229a93 AS runtime
+FROM nginx@sha256:5cb45c65713151f856f6b64f6a9b6a96b74d6a10709a7aa18919a444fd00bffa AS runtime
 
 # Pass build arg to runtime stage
 ARG ADD_NOINDEX_HEADER=false
