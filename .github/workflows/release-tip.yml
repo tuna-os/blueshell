@@ -118,6 +118,9 @@ jobs:
           fi
 
   tag:
+    # This job pushes the tip tag; releases use the separate GH_RELEASE_TOKEN.
+    permissions:
+      contents: write
     runs-on: namespace-profile-ghostty-sm
     needs: [setup, build-macos]
     if: needs.setup.outputs.should_skip != 'true'
@@ -257,13 +260,16 @@ jobs:
           cp zig-out/dist/*.tar.gz ghostty-source.tar.gz
 
       - name: Sign Tarball
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          echo -n "${{ secrets.MINISIGN_KEY }}" > minisign.key
-          echo -n "${{ secrets.MINISIGN_PASSWORD }}" > minisign.password
+          echo -n "$MINISIGN_KEY" > minisign.key
+          echo -n "$MINISIGN_PASSWORD" > minisign.password
           nix develop -c minisign -S -m ghostty-source.tar.gz -s minisign.key < minisign.password
 
       - name: Update Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           name: 'Ghostty Tip ("Nightly")'
           prerelease: true
@@ -312,13 +318,16 @@ jobs:
           cp zig-out/dist/*.tar.gz libghostty-vt-source.tar.gz
 
       - name: Sign Tarball
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          echo -n "${{ secrets.MINISIGN_KEY }}" > minisign.key
-          echo -n "${{ secrets.MINISIGN_PASSWORD }}" > minisign.password
+          echo -n "$MINISIGN_KEY" > minisign.key
+          echo -n "$MINISIGN_PASSWORD" > minisign.password
           nix develop -c minisign -S -m libghostty-vt-source.tar.gz -s minisign.key < minisign.password
 
       - name: Update Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           name: 'Ghostty Tip ("Nightly")'
           prerelease: true
@@ -397,13 +406,16 @@ jobs:
           zip -9 -r ../../ghostty-vt.xcframework.zip ghostty-vt.xcframework
 
       - name: Sign XCFramework
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          echo -n "${{ secrets.MINISIGN_KEY }}" > minisign.key
-          echo -n "${{ secrets.MINISIGN_PASSWORD }}" > minisign.password
+          echo -n "$MINISIGN_KEY" > minisign.key
+          echo -n "$MINISIGN_PASSWORD" > minisign.password
           nix develop -c minisign -S -m ghostty-vt.xcframework.zip -s minisign.key < minisign.password
 
       - name: Update Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           name: 'Ghostty Tip ("Nightly")'
           prerelease: true
@@ -521,14 +533,17 @@ jobs:
           done
 
       - name: Sign WASM
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          echo -n "${{ secrets.MINISIGN_KEY }}" > minisign.key
-          echo -n "${{ secrets.MINISIGN_PASSWORD }}" > minisign.password
+          echo -n "$MINISIGN_KEY" > minisign.key
+          echo -n "$MINISIGN_PASSWORD" > minisign.password
           nix develop -c minisign -S -m ghostty-vt.wasm -s minisign.key < minisign.password
           nix develop -c minisign -S -m ghostty-vt-small.wasm -s minisign.key < minisign.password
 
       - name: Update Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           name: 'Ghostty Tip ("Nightly")'
           prerelease: true
@@ -734,7 +749,7 @@ jobs:
 
       # Update Release
       - name: Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           name: 'Ghostty Tip ("Nightly")'
           prerelease: true
@@ -983,7 +998,7 @@ jobs:
 
       # Update Release
       - name: Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           name: 'Ghostty Tip ("Nightly")'
           prerelease: true
@@ -1180,7 +1195,7 @@ jobs:
 
       # Update Release
       - name: Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           name: 'Ghostty Tip ("Nightly")'
           prerelease: true

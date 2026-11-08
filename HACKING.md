@@ -17,7 +17,7 @@ Never post account credentials or API keys in issues or pull requests.
 
 ## Quick start (Fedora / Silverblue)
 
-Blueshell builds inside a Fedora 43 toolbox. The host needs Zig 0.15.x on PATH.
+Blueshell builds inside a Fedora 43 toolbox or natively on any Linux distribution with GTK4 and Libadwaita development libraries. The host needs Zig 0.16.x on PATH.
 
 ```sh
 # One-time: create the build toolbox
@@ -26,9 +26,9 @@ toolbox enter finupdate
 sudo dnf install blueprint-compiler gtk4-layer-shell-devel libadwaita-devel \
     meson gtk4-devel gobject-introspection-devel
 
-# Zig 0.15.x (run on the host — $HOME is shared)
-curl -L https://ziglang.org/download/0.15.0/zig-x86_64-linux-0.15.0.tar.xz | tar xJ -C ~/.local/
-ln -sf ~/.local/zig-x86_64-linux-0.15.0/zig ~/.local/bin/zig
+# Zig 0.16.x (run on the host — $HOME is shared)
+curl -L https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz | tar xJ -C ~/.local/
+ln -sf ~/.local/zig-x86_64-linux-0.16.0/zig ~/.local/bin/zig
 ```
 
 Build the GTK app:
@@ -45,6 +45,15 @@ toolbox run --container finupdate zig-out/bin/ghostty
 ```
 
 For release builds add `-Doptimize=ReleaseFast`.
+
+### Non-Fedora distributions
+
+For native builds outside of Fedora/Silverblue toolboxes:
+
+- Install the distribution-specific packages listed in [README.md](README.md#dependencies-by-distribution) (Ubuntu/Debian `apt`, Arch `pacman`, openSUSE `zypper`).
+- Ensure `blueprint-compiler` is version 0.16 or newer.
+- If your distribution does not package `gtk4-layer-shell`, build with `-fno-sys=gtk4-layer-shell` to compile the bundled version.
+- Build directly: `zig build -Dapp-runtime=gtk` (optionally `-fno-sys=gtk4-layer-shell`).
 
 ## Source layout (ptyxis-specific files)
 
@@ -88,15 +97,307 @@ flatpak-builder --install --user build-dir flatpak/org.tunaos.blueshell.yml
 
 The manifest bundles ptyxis-agent at `/app/libexec/ptyxis-agent`.
 
-## Adding new preferences
+## BlueShell GTK Application Architecture
 
-1. Add the row to `ui/1.5/preferences-window.blp` (or `profile-editor.blp` for per-profile).
-2. Add a `*adw.SwitchRow` / `*adw.ComboRow` / `*gtk.Scale` field to the `Private` struct.
-3. Add a `bindTemplateChildPrivate("row_name", .{})` call in `Class.init`.
-4. Load the current value in `loadCurrentValues` from `app.getConfig().get()`.
-5. Wire a signal handler in `init` that calls `config_bridge.setKey(..., null)` and `Application.default().triggerReload()`.
+BlueShell replaces upstream Ghostty's standard GTK interface with a modern Libadwaita application inspired by Ptyxis. This section details how the GTK port is structured, how components interact, and how to extend or debug the UI.
 
-For profile-specific settings, write to `priv.profile_path` instead of `null`, and call `self.syncActiveProfile()` instead of `triggerReload()`.
+### Architectural Fit & Relationship to Ghostty
+
+Upstream Ghostty defines an abstract application runtime layer (`src/apprt.zig`) that decouples terminal core logic (VT parsing, render scheduling, surface management) from platform windowing toolkits (macOS Cocoa, GTK, web).
+
+When compiling with `-Dapp-runtime=gtk`:
+- `src/apprt.zig` selects `src/apprt/gtk.zig`, routing into `src/apprt/gtk/App.zig` and `src/apprt/gtk/Surface.zig`.
+- `App.zig` creates and initializes `src/apprt/gtk/class/application.zig` (`GhosttyPtyxisApplication`), a subclass of `Adw.Application` (and `Gtk.Application`).
+- Upstream Ghostty's traditional GTK stubs and window widgets are replaced by BlueShell's Ptyxis-style widgets:
+  - `class/window.zig` (`GhosttyPtyxisWindow`): The main terminal window featuring tab overview, modern header bar with container dropdown, zoom controls, and hamburger menu.
+  - `class/preferences_window.zig` (`GhosttyPtyxisPreferencesWindow`): Libadwaita preferences window organized into pages (Appearance, Behavior, Shortcuts, Profiles).
+  - `class/profile_editor.zig` (`GhosttyPtyxisProfileEditor`): Modal dialog for editing per-profile shell commands, palettes, and configurations.
+  - `class/tab.zig` and `class/split_tree.zig`: Manage terminal tab organization and split panes wrapping terminal surfaces (`Surface.zig`).
+
+### Component Overview
+
+```
+                          ┌────────────────────────┐
+                          │ Ghostty Core / Config  │
+                          └───────────▲────────────┘
+                                      │
+                         triggerReload() / getConfig()
+                                      │
+ ┌────────────────────────────────────┴────────────────────────────────────┐
+ │ BlueShell GTK Application (`src/apprt/gtk/`)                            │
+ │                                                                         │
+ │  ┌────────────────────────┐                   ┌──────────────────────┐  │
+ │  │   PreferencesWindow    │                   │        Window        │  │
+ │  │   (Libadwaita / UI)    │                   │   (Header / Tabs)    │  │
+ │  └───────────┬────────────┘                   └──────────▲───────────┘  │
+ │              │ writes keys                               │ displays     │
+ │              ▼                                           │              │
+ │  ┌────────────────────────┐                   ┌──────────┴───────────┐  │
+ │  │     config_bridge      │                   │   container_object   │  │
+ │  │ (plain-text ~/.config) │                   │  (GObject container) │  │
+ │  └───────────┬────────────┘                   └──────────▲───────────┘  │
+ │              │ manages profiles                          │ wraps        │
+ │              ▼                                           │              │
+ │  ┌────────────────────────┐                   ┌──────────┴───────────┐  │
+ │  │     profile_store      │                   │   container_client   │  │
+ │  │ (~/profiles/*.config)  │                   │ (GDBus / socketpair) │  │
+ │  └────────────────────────┘                   └──────────▲───────────┘  │
+ └──────────────────────────────────────────────────────────┼──────────────┘
+                                                            │ peer-to-peer
+                                                            │ GDBus
+                                                 ┌──────────▼───────────┐
+                                                 │     ptyxis-agent     │
+                                                 │ (Podman/Toolbox/etc) │
+                                                 └──────────────────────┘
+```
+
+The primary subsystems are:
+1. **Preferences Window (`class/preferences_window.zig`)**: Implements Libadwaita preference pages with live-updating controls for fonts, Gogh palettes, cursor appearance, bell alerts, scrollback limits, and shortcuts.
+2. **Profile Store (`class/profile_store.zig`)**: Manages isolated profile configuration snapshots stored on disk.
+3. **Config Bridge (`class/config_bridge.zig`)**: Safe, non-destructive plain-text parser and writer for Ghostty configuration files.
+4. **Container Client (`class/container_client.zig`)**: Asynchronous D-Bus client interacting with `ptyxis-agent`.
+5. **Container Object (`class/container_object.zig`)**: GObject wrapper exposing container metadata to GTK selection models.
+6. **ptyxis-agent (`third_party/ptyxis-agent/`)**: Daemon discovering and spawning containerized environments (Toolbox, Distrobox, Podman).
+
+### Data Flow: Config Changes, Bridge, and Reload
+
+Ghostty config is read from plain-text files (typically `~/.config/ghostty/config`) without an upstream roundtripping serializer. BlueShell coordinates preference edits through `config_bridge`:
+
+1. **User Interaction**: User toggles a switch, picks a font, or adjusts a slider in the preferences window.
+2. **Signal Dispatch**: GTK signal callback (e.g., `notify::active`, `value-changed`) fires.
+3. **Write via Config Bridge**:
+   - `config_bridge.setKey(allocator, key, value, maybe_path)` is invoked.
+   - If `maybe_path` is `null`, it targets the active Ghostty config path (resolved via `config_bridge.resolveConfigPath`).
+   - If `maybe_path` is specified, it writes directly to a target profile snapshot.
+   - `config_bridge` preserves existing comments, replaces the last assignment of `key = value` if present (respecting Ghostty's "later wins" precedence), or appends a new assignment line.
+4. **Debounced Reload**:
+   - The UI calls `Application.default().triggerReload()`.
+   - `triggerReload()` queues a 300ms debounced timer via `glib.timeoutAdd`. Rapid successive changes (e.g., dragging an opacity slider) collapse into a single reload cycle.
+   - Upon timer expiry, `Application` reloads the active configuration and applies changes across all active windows and surfaces.
+
+### Profile Lifecycle
+
+BlueShell implements a snapshot-based profile management pattern:
+- **Storage Layout**:
+  - `~/.config/ghostty/config`: Active Ghostty configuration file currently loaded by the runtime.
+  - `~/.config/ghostty/profiles/{name}.config`: Named profile snapshots.
+  - `~/.config/ghostty/profiles/.active`: Plain text file recording the currently active profile name.
+- **Lifecycle Phases**:
+  1. **Load**: On startup or preferences launch, `profile_store.listProfiles()` scans `~/.config/ghostty/profiles/`, reading `.active` to flag which profile is active.
+  2. **Edit**: Editing a profile in `profile_editor.zig` writes directly to `~/.config/ghostty/profiles/{name}.config` via `config_bridge.setKey(..., priv.profile_path)`.
+  3. **Save & Sync**: If the edited profile is currently active, `self.syncActiveProfile()` copies changes over to `~/.config/ghostty/config` and calls `triggerReload()`.
+  4. **Apply (Switch)**: `profile_store.activateProfile(name)` copies the requested `{name}.config` snapshot over the active `~/.config/ghostty/config`, updates `.active`, and prompts `Application.default().triggerReload()`.
+
+### Container Discovery & D-Bus Client
+
+BlueShell integrates containerized shell environments without requiring root privileges or external system daemons:
+
+1. **Process Spawning**:
+   - When initialized, `container_client.zig` creates a UNIX stream socket pair using `socketpair(AF_UNIX, SOCK_STREAM | CLOEXEC, 0)`.
+   - The parent side wraps file descriptor 0 into a `GSocket` and `GSocketConnection`.
+   - The child side file descriptor is passed to `ptyxis-agent` via file descriptor 3 (`--socket-fd=3`) using `gio.SubprocessLauncher.takeFd`.
+2. **Peer-to-Peer D-Bus Connection**:
+   - BlueShell opens a private, peer-to-peer `GDBusConnection` over the stream (`authentication_server = true`, `authentication_allow_anonymous = true`).
+   - `ptyxis-agent` exposes the `org.gnome.Ptyxis.Agent` interface at `/org/gnome/Ptyxis/Agent`.
+3. **Query & GObject Wrapping**:
+   - `client.listContainers()` invokes the `ListContainers` method on `/org/gnome/Ptyxis/Agent`, retrieving object paths for all discovered container instances (e.g., Toolbox, Podman, Distrobox).
+   - For each container path, properties (`id`, `provider`, `display-name`, `icon-name`) are queried from `org.gnome.Ptyxis.Container`.
+   - `client.listAsModel()` wraps each entry in a `GhosttyPtyxisContainer` (`container_object.zig`) GObject and inserts it into a `Gio.ListStore`.
+4. **UI Presentation**:
+   - Main window header dropdowns consume the `Gio.ListStore` to display available containers with matching icons and names for one-click tab spawning.
+
+### ptyxis-agent Integration
+
+`ptyxis-agent` is vendored directly under `third_party/ptyxis-agent/`:
+- **Purpose**: A small, privileged-operation helper originally developed for GNOME Ptyxis. It interfaces with local container managers (Toolbox, Podman, Distrobox, JHBuild) to discover running environments and safely spawn pseudo-terminals inside them.
+- **Why Vendored**: Bundled as a standalone C Meson subproject to avoid requiring upstream GNOME Ptyxis or distro-level packaging dependencies, ensuring reproducible Flatpak and native builds.
+- **Updating ptyxis-agent**:
+  1. Update sources in `third_party/ptyxis-agent/` from upstream Ptyxis.
+  2. Inspect changes in `third_party/ptyxis-agent/meson.build` and IPC interface definitions in `org.gnome.Ptyxis.Agent.xml`.
+  3. Rebuild locally: `cd third_party/ptyxis-agent && meson setup build && meson compile -C build`.
+  4. Verify compatibility with `src/apprt/gtk/class/container_client.zig`.
+
+### Blueprint Compilation & GTK Signal Wiring
+
+BlueShell designs its UI declaratively using Blueprint (`.blp`), which compiles to standard GtkBuilder XML at build time:
+- **Blueprint Definitions**: Located in `src/apprt/gtk/ui/1.5/*.blp`.
+- **GResource Embedding**: Compiled blueprints are embedded into GResource bundles (`src/apprt/gtk/build/gresource.zig`).
+- **Template Binding**:
+  - Classes bind their template with `class.setTemplate(gresource.blueprint(.{ .major = 1, .minor = 5, .name = "..." }))`.
+  - Child widgets declared in Blueprint are mapped to Zig struct fields in `Class.init` using `class.bindTemplateChildPrivate("widget_name", .{})`.
+- **Signal Connections**:
+  - Signal handlers are connected in `init` using `gobject.signalConnectData` (e.g., connecting `notify::active` or `clicked` to callback functions).
+
+### Code Examples: Adding Preferences
+
+The following pattern illustrates how preferences are wired between Blueprint, the private class struct, and `config_bridge`.
+
+#### Example 1: Font Selection (`FontDialogButton`)
+
+In `ui/1.5/preferences-window.blp`:
+```blueprint
+Adw.ActionRow custom_font_row {
+  title: _("Custom Font");
+  activatable-widget: font_button;
+
+  [suffix]
+  FontDialogButton font_button {
+    valign: center;
+    dialog: FontDialog {
+      title: _("Choose a Terminal Font");
+      modal: true;
+    };
+  }
+}
+```
+
+In `src/apprt/gtk/class/preferences_window.zig`:
+```zig
+// 1. Declare struct member
+const Private = struct {
+    font_button: *gtk.FontDialogButton,
+    // ...
+};
+
+// 2. Bind template child in Class.init
+fn classInit(class: *Class) void {
+    class.bindTemplateChildPrivate("font_button", .{});
+}
+
+// 3. Connect signal in instance init
+fn init(self: *Self) void {
+    const priv = self.private();
+    _ = gobject.signalConnectData(
+        priv.font_button.as(gobject.Object),
+        "notify::font-desc",
+        @ptrCast(&fontDescChanged),
+        self,
+        null,
+        .{},
+    );
+}
+
+// 4. Handle change and write via config_bridge
+fn fontDescChanged(btn: *gtk.FontDialogButton, _: *gobject.ParamSpec, _: *Self) callconv(.c) void {
+    const desc = btn.getFontDesc() orelse return;
+    const str_z = pango_font_description_to_string(@ptrCast(desc));
+    defer g_free(@ptrCast(@constCast(str_z)));
+
+    const parts = logic.splitFontDesc(std.mem.span(str_z));
+    config_bridge.setKey(std.heap.c_allocator, "font-family", parts.family, null) catch |err| {
+        log.warn("font-family write: {s}", .{@errorName(err)});
+    };
+    if (parts.size) |size| {
+        config_bridge.setKey(std.heap.c_allocator, "font-size", size, null) catch |err| {
+            log.warn("font-size write: {s}", .{@errorName(err)});
+        };
+    }
+    Application.default().triggerReload();
+}
+```
+
+#### Example 2: Palette Selector (`FlowBox` with Dynamic CSS)
+
+In `preferences_window.zig`, palette cards are created dynamically and added to `palette_flowbox`:
+```zig
+// When a user selects a palette swatch card:
+fn onPaletteClicked(btn: *gtk.Button, _: ?*anyopaque) callconv(.c) void {
+    const ptr = gobject.Object.getData(btn.as(gobject.Object), "ptyxis-palette-id") orelse return;
+    const id_cstr: [*:0]const u8 = @ptrCast(ptr);
+    const id = std.mem.span(id_cstr);
+
+    applyPalette(id) catch |err| {
+        log.warn("applyPalette({s}) failed: {s}", .{ id, @errorName(err) });
+    };
+}
+
+pub fn applyPaletteToPath(id: []const u8, maybe_path: ?[]const u8) !void {
+    // Writes light and dark variants to Ghostty theme files and updates config
+    try config_bridge.setKey(alloc, "theme", theme_spec, maybe_path);
+    Application.default().triggerReload();
+}
+```
+
+### Testing UI Changes
+
+Before submitting GTK changes, test them using the provided headless automation test scripts under `test/ui/`:
+
+1. **Headless Smoke Test (`test/ui/smoke.sh`)**:
+   - Launches Ghostty under `xvfb-run` and `dbus-run-session` using an isolated configuration directory.
+   - Instantiates GTK blueprint templates, verifying template child bindings, GResource paths, and basic lifecycle stability without requiring a physical monitor.
+   ```sh
+   test/ui/smoke.sh [path-to-ghostty-binary]
+   ```
+
+2. **Screenshot Walkthrough Test (`test/ui/walkthrough.sh`)**:
+   - Drives Ghostty under Xvfb through all preferences pages and main window states.
+   - Captures PNG screenshots in `test/ui/screenshots/` (using ImageMagick `import`) for automated regression checking and visual inspection.
+   ```sh
+   test/ui/walkthrough.sh [path-to-ghostty-binary] [output-dir]
+   ```
+
+## CI & GitHub Workflows
+
+The repository contains 20 workflow files under `.github/workflows/`. Because Blueshell is a fork of Ghostty, these workflows fall into two distinct groups: **Fork-owned / active workflows** tailored for Blueshell on Linux/TunaOS, and **Inherited upstream Ghostty workflows**, many of which do not run here or fail due to missing upstream secrets/runners.
+
+### Active Workflows
+
+The following workflows are actively maintained and run in the `tuna-os/blueshell` repository:
+
+| Workflow | File | Trigger | Purpose & Notes |
+| --- | --- | --- | --- |
+| **ptyxis-tests** | `ptyxis-tests.yml` | Push (`ptyxis-port`), PR, dispatch | **Primary CI gate**. Runs Zig formatting (`zig fmt --check`), unit & integration tests (`config_bridge`, `profile_store`, `preferences_logic`, `agent_monitor`, shell integration/flatpak host), vendored `ptyxis-agent` meson tests, headless UI smoke test (`test/ui/smoke.sh`), and captures screenshot walkthroughs (`test/ui/walkthrough.sh`). On push to `ptyxis-port`, commits walkthrough shots to the `screenshots` branch. |
+| **Blueshell Flatpak** | `ghostty-ptyxis.yml` | Push (`ptyxis-port`), dispatch | Builds the standalone Flatpak bundle (`blueshell.flatpak`) using `flatpak-builder` in GNOME 48 container and uploads it as an artifact. |
+| **Publish Flatpak** | `publish-flatpak.yml` | Push (`ptyxis-port`, `v*` tags), dispatch | Native multi-arch build (`x86_64` on `ubuntu-24.04`, `aarch64` on `ubuntu-24.04-arm`). Pushes OCI image to GHCR (`ghcr.io/tuna-os/blueshell`), exports per-arch tarballs for release bundles, and updates the TunaOS Flatpak index (`tunaos.org/flatpak`) via `FLATPAK_INDEX_TOKEN`. |
+| **Publish Ghostty Flatpak** | `publish-ghostty-flatpak.yml` | Cron (Sundays 05:00 UTC), dispatch, PR (paths: `flatpak/ghostty-stock/**`) | Builds and republishes stock upstream Ghostty (`com.mitchellh.ghostty`) pinned at a known-good commit to the TunaOS Flatpak remote, alongside Blueshell. |
+| **upstream-sync** | `upstream-sync.yml` | Cron (Mondays 09:00 UTC), dispatch | Rebase automation onto `ghostty-org/ghostty:main`. If clean rebase succeeds, opens a sync PR; if conflicts arise, files an issue with conflict hotspots and commit range. See [UPSTREAM_SYNC.md](UPSTREAM_SYNC.md). |
+| **Clean Artifacts** | `clean-artifacts.yml` | Cron (Daily 00:00 UTC), dispatch | Prunes workflow run artifacts older than 1 week to conserve repository storage. |
+
+### Inherited Upstream Workflows
+
+These workflows are inherited from upstream Ghostty (`ghostty-org/ghostty`). Most are non-functional or dormant in this fork:
+
+| Workflow | File | Trigger / Condition | Status in Blueshell | Why it does not run or is unused |
+| --- | --- | --- | --- | --- |
+| **Test** | `test.yml` | Push, PR, dispatch | **Dormant / Skipped** | Upstream's comprehensive matrix (50+ jobs across macOS, Linux, Windows, WASM). Gated by `if: github.repository == 'ghostty-org/ghostty'` and relies on Namespace Cloud runners (`namespace-profile-ghostty-*`). Blueshell uses `ptyxis-tests.yml` instead. |
+| **Nix** | `nix.yml` | Push, PR | **Failing / Inactive** | Runs on `namespace-profile-ghostty-sm`. Blueshell ships as a Flatpak, not a Nix package. |
+| **Vouch (5 workflows)** | `vouch-check-issue.yml`<br>`vouch-check-pr.yml`<br>`vouch-manage-by-discussion.yml`<br>`vouch-manage-by-issue.yml`<br>`vouch-sync-codeowners.yml` | Issue, PR, discussion, schedule | **Non-functional** | Upstream's anti-spam vouch bot (`mitchellh/vouch`). Requires GitHub App secrets `VOUCH_APP_ID` and `VOUCH_APP_PRIVATE_KEY` which are not provisioned in `tuna-os`. Fails immediately when issues or PRs are opened/commented. |
+| **Milestone Action** | `milestone.yml` | Closed issues / PRs | **Inactive** | Auto-assigns milestones upon PR merge or issue closure. Harmless but no milestones are currently configured in Blueshell. |
+| **Flatpak (upstream)** | `flatpak.yml` | Dispatch | **Unused** | Gated to `ghostty-org/ghostty` with upstream runner matrix. Superseded by `ghostty-ptyxis.yml` and `publish-flatpak.yml`. |
+| **Snap** | `snap.yml` | Dispatch | **Unused** | Upstream Snap packaging; requires Namespace Cloud runners and build artifacts from upstream `test.yml`. |
+| **Release Tag** | `release-tag.yml` | Dispatch | **Unused** | Upstream macOS release pipeline (Apple notarization, Sparkle appcast, Sentry, Cloudflare R2). Tag push trigger was intentionally disabled in Blueshell; release packaging is handled by `publish-flatpak.yml`. |
+| **Publish Tagged Release** | `publish-tag.yml` | Dispatch | **Unused** | Upstream release deployer; runs on `namespace-profile-ghostty-sm`. |
+| **Release Tip** | `release-tip.yml` | Workflow run (`Test` on `main`), dispatch | **Unused** | Upstream nightly tip release pipeline triggered by completed upstream `Test` workflow on `main`. |
+| **Update colorschemes** | `update-colorschemes.yml` | Cron (Sundays 00:00 UTC), dispatch | **Dormant** | Gated to `ghostty-org/ghostty`; syncs iTerm2 color schemes. |
+
+### CI Status Gates & Branch Protection
+
+- **Merge Target**: The integration and default branch is `ptyxis-port`. All PRs should target `ptyxis-port`.
+- **Status Checks**: The mandatory CI gate for pull requests is **`ptyxis-tests`** (`Unit + integration tests`). It verifies compilation, fork logic tests, and headless execution under Xvfb.
+- **Upstream Test vs Fork Test**: Do not attempt to run upstream's `test.yml` as a prerequisite for PRs. It requires custom runner profiles and upstream secrets.
+
+### Guidelines for Adding or Modifying Workflows
+
+1. **Avoid Upstream Merge Conflicts**:
+   - Keep Blueshell-specific workflows separate from upstream workflow files. Fork-specific workflows should use distinct names (such as `ptyxis-tests.yml`, `ghostty-ptyxis.yml`, `publish-flatpak.yml`).
+   - Do not heavily edit inherited upstream workflow files (`test.yml`, `release-*.yml`) unless disabling unwanted triggers; keeping them close to upstream minimizes conflicts during weekly rebases (`upstream-sync`).
+2. **Runner Selection**:
+   - Use standard GitHub-hosted runners (`ubuntu-24.04` or `ubuntu-latest`, and `ubuntu-24.04-arm` where native aarch64 is needed).
+   - Never use `namespace-profile-*` runners; those are proprietary to upstream Ghostty's CI infrastructure.
+3. **Permissions**:
+   - Follow the principle of least privilege. Declare explicit top-level `permissions:` blocks in workflow files.
+   - Workflows opening issues or PRs (like `upstream-sync.yml`) require `contents: write`, `pull-requests: write`, and `issues: write`.
+4. **Zig Versions**:
+   - Ensure the Zig toolchain in CI matches the `minimum_zig_version` specified in `build.zig.zon` (currently `0.16.0`).
+
+### Troubleshooting Common CI Failures
+
+- **Zig dependency fetch timeouts (HTTP 5xx)**:
+  Upstream dependencies hosted on external git mirrors (e.g., `gitlab.freedesktop.org`) occasionally suffer transient 502/504 errors. `ptyxis-tests.yml` includes an automatic retry loop for `zig build --fetch=all`. If a fetch fails locally or in CI, rerun the job.
+- **`Vouch - Check PR` / `Vouch - Manage by Issue` failures**:
+  The `vouch-*` workflows fail because the GitHub App private key secrets (`VOUCH_APP_ID`, `VOUCH_APP_PRIVATE_KEY`) do not exist in the `tuna-os` org. These failures can be ignored by contributors; they do not block PR merging.
+- **Missing display for UI tests**:
+  The UI smoke test and screenshot walkthrough require an X11 display server. In CI, they execute inside `xvfb-run -a dbus-run-session`. For local testing, ensure `xvfb` and `dbus` are available, or use the containerized toolbox workflow described in [Quick start](#quick-start-fedora--silverblue).
 
 ---
 

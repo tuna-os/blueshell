@@ -1,19 +1,21 @@
-# Contributing to Ghostty
+# Contributing to Blueshell
 
-This document describes the process of contributing to Ghostty. It is intended
-for anyone considering opening an **issue**, **discussion** or **pull request**.
-For people who are interested in developing Ghostty and technical details behind
-it, please check out our ["Developing Ghostty"](HACKING.md) document as well.
+This document describes the process of contributing to Blueshell. It is intended
+for anyone considering opening an **issue** or **pull request**.
+For technical details and build workflows, please check out our ["Developing Blueshell"](HACKING.md)
+guide and ["Testing Blueshell"](TESTING.md) document as well.
 
 > [!NOTE]
 >
-> I'm sorry for the wall of text. I'm not trying to be difficult and I do
-> appreciate your contributions. Ghostty is a personal project for me that
-> I maintain in my free time. If you're expecting me to dedicate my personal
-> time to fixing bugs, maintaining features, and reviewing code, I do kindly
-> ask you spend a few minutes reading this document. Thank you. ❤️
+> Blueshell is an open-source terminal emulator that adapts upstream Ghostty's
+> terminal emulation engine and GTK apprt with a Ptyxis-inspired UI, profile system,
+> and container integration.
+>
+> If you are contributing code, fixes, or documentation, please spend a few minutes
+> reading this document. Thank you! ❤️
 
 <!-- hive-contribute-plea: donated-compute appeal, keep in sync across repos -->
+
 ## Contribute compute — no code needed
 
 **[Donate time with your AI CLI](https://hub.tunaos.org/#contribute).**
@@ -32,177 +34,97 @@ Never post account credentials or API keys in issues or pull requests.
 explain what your changes do and how they interact with the greater system
 without the aid of AI tools, do not contribute to this project.
 
-Using AI to write code is fine. You can gain understanding by interrogating an
-agent with access to the codebase until you grasp all edge cases and effects
-of your changes. What's not fine is submitting agent-generated slop without
-that understanding. Be sure to read the [AI Usage Policy](AI_POLICY.md).
+Using AI to assist in writing code is fine, but you must thoroughly understand
+and verify all code you submit. What's not fine is submitting unverified or
+poorly understood agent-generated code without taking responsibility for the
+changes. Please review the [AI Usage Policy](AI_POLICY.md).
 
-## AI Usage
+## Upstream Relationship (Ghostty & Ptyxis)
 
-The Ghostty project has strict rules for AI usage. Please see
-the [AI Usage Policy](AI_POLICY.md). **This is very important.**
+Blueshell is developed in `tuna-os/blueshell` on the `ptyxis-port` integration branch:
 
-## First-Time Contributors
-
-We use a vouch system for first-time contributors:
-
-1. Open a
-   [discussion in the "Vouch Request"](https://github.com/ghostty-org/ghostty/discussions/new?category=vouch-request)
-   category describing what you want to change and why. Follow the template.
-2. Keep it concise
-3. Write in your own voice, don't have an AI write this
-4. A maintainer will comment `!vouch` if approved
-5. Once approved, you can submit PRs
-
-If you aren't vouched, any pull requests you open will be
-automatically closed. This system exists because open source works
-on a system of trust, and AI has unfortunately made it so we can no
-longer trust-by-default because it makes it too trivial to generate
-plausible-looking but actually low-quality contributions.
-
-## Contributors Prior to the Vouch System
-
-If you contributed to Ghostty prior to the introduction
-of the vouch system and wish to continue contributing, you were not
-automatically added to the [list of vouched users](.github/VOUCHED.td). You will need to follow the same
-process as a first-time contributor to be vouched.
-
-## Denouncement System
-
-If you repeatedly break the rules of this document or repeatedly
-submit low quality work, you will be **denounced.** This adds your
-username to a public list of bad actors who have wasted our time. All
-future interactions on this project will be automatically closed by
-bots.
-
-The denouncement list is public, so other projects who trust our
-maintainer judgement can also block you automatically.
+- **Upstream Ghostty**: Blueshell layers its GTK / Libadwaita interface on top of Ghostty's
+  Zig terminal core. For details on how we track and rebase upstream Ghostty changes,
+  see [UPSTREAM_SYNC.md](UPSTREAM_SYNC.md) and [CONFLICT_HOTSPOTS.md](CONFLICT_HOTSPOTS.md).
+- **Issue Tracker & Pull Requests**: All issues, feature requests, bug reports, and pull
+  requests for Blueshell belong in the **[tuna-os/blueshell issue tracker](https://github.com/tuna-os/blueshell/issues)**.
+  Do **not** report Blueshell bugs or submit Blueshell PRs to upstream `ghostty-org/ghostty` or `chergert/ptyxis`.
+- **Target Branch**: All pull requests must target the `ptyxis-port` branch.
 
 ## Quick Guide
 
 ### I'd like to contribute
 
-[All issues are actionable](#issues-are-actionable). Pick one and start
-working on it. Thank you. If you need help or guidance, comment on the issue.
-Issues that are extra friendly to new contributors are tagged with
-["contributor friendly"].
-
-["contributor friendly"]: https://github.com/ghostty-org/ghostty/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22contributor%20friendly%22
-
-### I'd like to translate Ghostty to my language
-
-We have written a [Translator's Guide](po/README_TRANSLATORS.md) for
-everyone interested in contributing translations to Ghostty.
-Translations usually do not need to go through the process of issue triage
-and you can submit pull requests directly, although please make sure that
-our [Style Guide](po/README_TRANSLATORS.md#style-guide) is followed before
-submission.
+Check out the [open issues](https://github.com/tuna-os/blueshell/issues) on GitHub.
+Pick an issue that interests you, comment to let others know you are looking into it,
+and open a pull request once you have a tested solution.
 
 ### I have a bug! / Something isn't working
 
-First, search the issue tracker and discussions for similar issues. Tip: also
-search for [closed issues] and [discussions] — your issue might have already
-been fixed!
-
-> [!NOTE]
->
-> If there is an _open_ issue or discussion that matches your problem,
-> **please do not comment on it unless you have valuable insight to add**.
->
-> GitHub has a very _noisy_ set of default notification settings which
-> sends an email to _every participant_ in an issue/discussion every time
-> someone adds a comment. Instead, use the handy upvote button for discussions,
-> and/or emoji reactions on both discussions and issues, which are a visible
-> yet non-disruptive way to show your support.
-
-If your issue hasn't been reported already, open an ["Issue Triage"] discussion
-and make sure to fill in the template **completely**. They are vital for
-maintainers to figure out important details about your setup.
-
-> [!WARNING]
->
-> A _very_ common mistake is to file a bug report either as a Q&A or a Feature
-> Request. **Please don't do this.** Otherwise, maintainers would have to ask
-> for your system information again manually, and sometimes they will even ask
-> you to create a new discussion because of how few detailed information is
-> required for other discussion types compared to Issue Triage.
->
-> Because of this, please make sure that you _only_ use the "Issue Triage"
-> category for reporting bugs — thank you!
-
-[closed issues]: https://github.com/ghostty-org/ghostty/issues?q=is%3Aissue%20state%3Aclosed
-[discussions]: https://github.com/ghostty-org/ghostty/discussions?discussions_q=is%3Aclosed
-["Issue Triage"]: https://github.com/ghostty-org/ghostty/discussions/new?category=issue-triage
+1. First, search the [Blueshell issue tracker](https://github.com/tuna-os/blueshell/issues)
+   (both open and closed issues) to see if the problem has already been reported or solved.
+2. If your issue hasn't been reported yet, open a new issue in `tuna-os/blueshell`.
+3. Fill in reproduction steps, expected behavior, terminal output or logs, and system details
+   (OS distribution, desktop environment/compositor, GPU driver, package format like Flatpak or native build).
 
 ### I have an idea for a feature
 
-Like bug reports, first search through both issues and discussions and try to
-find if your feature has already been requested. Otherwise, open a discussion
-in the ["Feature Requests, Ideas"] category.
+1. Search existing issues to ensure the feature isn't already planned or discussed.
+2. Open an issue describing the proposed feature, the use case, and how it aligns
+   with Blueshell's container-first, GNOME/Libadwaita terminal experience.
 
-["Feature Requests, Ideas"]: https://github.com/ghostty-org/ghostty/discussions/new?category=feature-requests-ideas
+### I'd like to translate Blueshell
 
-### I've implemented a feature
+We welcome localization improvements. See [po/README_TRANSLATORS.md](po/README_TRANSLATORS.md)
+for instructions on updating gettext catalogs. Make sure translations follow the
+project's style guide and can be compiled cleanly with gettext tools.
 
-1. If there is an issue for the feature, open a pull request straight away.
-2. If there is no issue, open a discussion and link to your branch.
-3. If you want to live dangerously, open a pull request and
-   [hope for the best](#pull-requests-implement-an-issue).
+## Development and Testing Workflow
 
-### I have a question which is neither a bug report nor a feature request
+Before opening a pull request, ensure your code compiles and passes local tests and formatting checks.
 
-Open an [Q&A discussion], or join our [Discord Server] and ask away in the
-`#help` forum channel.
+### Building
 
-Do not use the `#terminals` or `#development` channels to ask for help —
-those are for general discussion about terminals and Ghostty development
-respectively. If you do ask a question there, you will be redirected to
-`#help` instead.
+Blueshell requires Zig 0.15.x and GTK4 / Libadwaita development packages. You can build natively or within a Fedora toolbox:
 
-> [!NOTE]
-> If your question is about a missing feature, please open a discussion under
-> the ["Feature Requests, Ideas"] category. If Ghostty is behaving
-> unexpectedly, use the ["Issue Triage"] category.
->
-> The "Q&A" category is strictly for other kinds of discussions and do not
-> require detailed information unlike the two other categories, meaning that
-> maintainers would have to spend the extra effort to ask for basic information
-> if you submit a bug report under this category.
->
-> Therefore, please **pay attention to the category** before opening
-> discussions to save us all some time and energy. Thank you!
+```sh
+# Build GTK application (debug)
+zig build -Dapp-runtime=gtk
 
-[Q&A discussion]: https://github.com/ghostty-org/ghostty/discussions/new?category=q-a
-[Discord Server]: https://discord.gg/ghostty
+# Fast release build
+zig build -Dapp-runtime=gtk -Doptimize=ReleaseFast
+```
 
-## General Patterns
+See [HACKING.md](HACKING.md) for full developer environment setup (Fedora toolbox, dependencies, flags).
 
-### Issues are Actionable
+### Testing
 
-The Ghostty [issue tracker](https://github.com/ghostty-org/ghostty/issues)
-is for _actionable items_.
+Blueshell maintains automated tests across unit, integration, and UI smoke lanes:
 
-Unlike some other projects, Ghostty **does not use the issue tracker for
-discussion or feature requests**. Instead, we use GitHub
-[discussions](https://github.com/ghostty-org/ghostty/discussions) for that.
-Once a discussion reaches a point where a well-understood, actionable
-item is identified, it is moved to the issue tracker. **This pattern
-makes it easier for maintainers or contributors to find issues to work on
-since _every issue_ is ready to be worked on.**
+```sh
+# Run targeted test suites
+zig build test -Dtest-filter=config_bridge
+zig build test -Dtest-filter=profile_store
+zig build test -Dtest-filter=preferences_logic
 
-### Pull Requests Implement an Issue
+# Run a specific test
+zig build test -Dtest-filter="<test name>"
+```
 
-Pull requests should be associated with a previously accepted issue.
-**If you open a pull request for something that wasn't previously discussed,**
-it may be closed or remain stale for an indefinite period of time. I'm not
-saying it will never be accepted, but the odds are stacked against you.
+For UI smoke tests and screenshot walkthrough testing (using Xvfb), see [TESTING.md](TESTING.md).
 
-Issues tagged with "feature" represent accepted, well-scoped feature requests.
-If you implement an issue tagged with feature as described in the issue, your
-pull request will be accepted with a high degree of certainty.
+### Code Formatting
 
-> [!NOTE]
->
-> **Pull requests are NOT a place to discuss feature design.** Please do
-> not open a WIP pull request to discuss a feature. Instead, use a discussion
-> and link to your branch.
+Please format your changes before submitting:
+
+- **Zig**: `zig fmt .`
+- **Swift** (macOS, if applicable): `swiftlint lint --strict --fix`
+- **Other files (JSON, Markdown, YAML)**: `npx prettier -w .`
+
+## Pull Request Guidelines
+
+1. **Base Branch**: Ensure your branch is branched from and opened against `upstream/ptyxis-port`.
+2. **Commit Messages**: Follow Conventional Commits format (e.g. `feat: ...`, `fix: ...`, `docs: ...`, `chore: ...`).
+3. **Signed-off-by Trailer**: Every commit must carry a Developer Certificate of Origin (DCO) sign-off (`git commit -s`).
+4. **Issue References**: Link the relevant issue in your pull request description using GitHub keywords (e.g. `Closes #123` or `Fixes #123`).
+5. **Continuous Integration**: Ensure CI checks (build, test, formatting) pass on your pull request.

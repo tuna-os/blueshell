@@ -45,7 +45,16 @@ flatpak install tuna-os org.tunaos.blueshell
 ```
 
 Updates then arrive through normal `flatpak update`. Both x86_64 and aarch64
-are published, and every commit to `ptyxis-port` refreshes the remote. The app
+are published. Note that while OCI builds and rolling tip releases publish
+automatically on every commit to `ptyxis-port`, refreshing the live `tuna-os`
+remote index requires the repository secret `FLATPAK_INDEX_TOKEN` (a PAT with
+push access to `tuna-os/docs`). When the secret is unset (such as in forks or
+before maintainer provisioning), the publish workflow skips the index update
+and uploads a `blueshell-index-snippet` artifact; maintainers can then provision
+the secret and re-run, or manually merge the snippet's `Results` entry into
+`tuna-os/docs:static/flatpak/index/static` (see
+[.github/workflows/publish-flatpak.yml](.github/workflows/publish-flatpak.yml)
+and [docs/TUNA_OS_PROMOTION.md](docs/TUNA_OS_PROMOTION.md)). The app
 is listed on [tunaos.org](https://tunaos.org/) alongside the other TunaOS apps.
 
 ### Flatpak bundle — direct download
@@ -75,13 +84,36 @@ flatpak-builder --install --user build-dir flatpak/org.tunaos.blueshell.yml
 
 ### Build from source
 
-Requires Zig 0.15.x and the GTK/Libadwaita development stack. On Fedora 43+:
+Requires Zig 0.16.x (or the minimum version declared in `build.zig.zon`) and the GTK4/Libadwaita development stack.
+
+#### Dependencies by distribution
+
+**Fedora 43+:**
+```sh
+sudo dnf install blueprint-compiler gtk4-layer-shell-devel libadwaita-devel meson
+```
+
+**Ubuntu / Debian:**
+```sh
+sudo apt install libgtk-4-dev libadwaita-1-dev blueprint-compiler meson gettext libxml2-utils
+```
+*Note for Ubuntu/Debian:* If `libgtk4-layer-shell-dev` is not packaged in your release (e.g. Ubuntu 24.04), add `-fno-sys=gtk4-layer-shell` to the `zig build` command to build the vendored copy. Also ensure `blueprint-compiler` is version 0.16 or newer (on older distros, clone from upstream or install via pip/flatpak).
+
+**Arch Linux:**
+```sh
+sudo pacman -S gtk4 gtk4-layer-shell libadwaita blueprint-compiler meson
+```
+
+**openSUSE (Tumbleweed / Leap):**
+```sh
+sudo zypper install gtk4-devel libadwaita-devel blueprint-compiler meson
+```
+*Note for openSUSE:* If `gtk4-layer-shell-devel` is unavailable (e.g. on Leap), pass `-fno-sys=gtk4-layer-shell` to `zig build`.
+
+#### Building
 
 ```sh
-# Inside a toolbox or on the host:
-sudo dnf install blueprint-compiler gtk4-layer-shell-devel libadwaita-devel meson
-
-# Download Zig 0.15.x from https://ziglang.org/download/ and put on PATH
+# Download Zig 0.16.x from https://ziglang.org/download/ and put on PATH
 
 git clone https://github.com/tuna-os/blueshell
 cd blueshell
@@ -221,4 +253,4 @@ Blueshell uses Ghostty's standard config format at `~/.config/ghostty/config`. A
 - **[Ptyxis](https://gitlab.gnome.org/chergert/ptyxis)** by Christian Hergert — UI design, container integration, palette collection, profile system design
 - **Blueshell** ports Ptyxis's UI into Ghostty's GTK apprt as Zig
 
-License: GPL-3.0-or-later (matching both upstream projects)
+License: MIT (matching upstream Ghostty; vendored `ptyxis-agent` is GPL-3.0-or-later — see [LICENSE](LICENSE) and [third_party/ptyxis-agent/PROVENANCE.md](third_party/ptyxis-agent/PROVENANCE.md))

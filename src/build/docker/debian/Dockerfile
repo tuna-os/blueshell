@@ -1,5 +1,5 @@
 ARG DISTRO_VERSION="13"
-FROM docker.io/library/debian:${DISTRO_VERSION}@sha256:913f6706df59a68922d1dd08f78c2476560a8d367897200a6005b00e5f67c2d5
+FROM docker.io/library/debian:${DISTRO_VERSION}@sha256:9c6e381421d0f48d1b8133e573f33c185ee16cbf505eda9c4a8a4791b25ea8a6
 
 # Install Dependencies
 RUN DEBIAN_FRONTEND="noninteractive" apt-get -qq update && \

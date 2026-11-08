@@ -33,12 +33,20 @@ on:
     # pipeline has no "upstream unchanged" short-circuit -- every run is two
     # full Zig builds (x86_64 + aarch64, ~11 min each), and a republished
     # upstream terminal does not need same-day freshness.
-    - cron: '0 5 * * 0'
+    - cron: "0 5 * * 0"
   workflow_dispatch:
+    inputs:
+      release-tarballs:
+        description: Publish a new versioned Ghostty /app-tree release after validation
+        type: boolean
+        default: false
   pull_request:
     paths:
       - flatpak/ghostty-stock/**
       - .github/workflows/publish-ghostty-flatpak.yml
+      - .github/scripts/*ghostty-release.py
+      - .github/scripts/tests/test_ghostty_release.py
+      - .github/scripts/tests/ghostty-oci-roundtrip.sh
 permissions:
   contents: read
 
@@ -61,7 +69,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: tuna-os/.github/.github/workflows/publish-flatpak.yml@main
+    uses: tuna-os/.github/.github/workflows/publish-flatpak.yml@fded0603d7e383990e8259141419fe6c1d641f41 # tuna-os/.github main, 2026-10-31
     with:
       app-id: com.mitchellh.ghostty
       manifest-path: flatpak/ghostty-stock/com.mitchellh.ghostty.yml
@@ -87,7 +95,86 @@ jobs:
       # build-only job here and the app in a VM. The current pin is
       # upstream main from 2026-09-13, which Utah's e2e passed with.)
       publish: ${{ github.event_name != 'pull_request' }}
-      # No bundles on the GitHub release: these are upstream's builds, and
-      # this repo's releases are Blueshell's.
+      # FlatPark needs /app-tree tarballs, not .flatpak bundles. The jobs
+      # below export the shared build's OCI artifacts into a separate release.
       attach-bundles: false
     secrets: inherit
+
+  export-tarballs:
+    name: Export Ghostty release (${{ matrix.arch }})
+    needs: publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: oci-${{ matrix.arch }}
+          path: oci
+      - name: Install export tools
+        run: sudo apt-get update && sudo apt-get install -y flatpak ostree
+      - name: Test archive and receipt validation
+        run: python3 -m unittest discover -s .github/scripts/tests -p test_ghostty_release.py -v
+      - name: Test Flatpak OCI round trip for both architectures
+        run: bash .github/scripts/tests/ghostty-oci-roundtrip.sh
+      - name: Export actual built app tree
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          python3 .github/scripts/export-ghostty-release.py \
+            --oci oci --arch "$ARCH" --source-commit "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --manifest flatpak/ghostty-stock/com.mitchellh.ghostty.yml --output release
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ghostty-release-${{ matrix.arch }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release-tarballs:
+    name: Publish versioned Ghostty tarballs
+    needs: export-tarballs
+    if: >-
+      github.repository == 'tuna-os/blueshell' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/ptyxis-port' && inputs.release-tarballs
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: ghostty-release-*
+          path: release
+          merge-multiple: true
+      - name: Create a new release, verify uploaded bytes, then publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=$(python3 .github/scripts/prepare-ghostty-release.py release)
+          # Create only: no clobber, force-push, or editing any prior release.
+          # Run attempt is part of the identity; a retry gets a fresh release.
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "Ghostty (Tuna packaging) $tag" \
+            --notes-file release/release-notes.md --draft --latest=false \
+            release/*.tar.gz release/*.json release/SHA256SUMS
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir verified
+          cmp release/release.json verified/release.json
+          python3 .github/scripts/prepare-ghostty-release.py verified
+          cmp release/release.json verified/release.json
+          (cd verified && sha256sum -c SHA256SUMS)
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,assets \
+            >> "$GITHUB_STEP_SUMMARY"

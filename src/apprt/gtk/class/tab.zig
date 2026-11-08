@@ -233,6 +233,7 @@ pub const Tab = extern struct {
             .shell_integration = overrides.shell_integration,
             .working_directory = overrides.working_directory,
             .title = overrides.title,
+            .container_spawn_token = overrides.container_spawn_token,
         }) catch |err| switch (err) {
             error.OutOfMemory => {
                 // TODO: We should make our "no surfaces" state more aesthetically
@@ -582,7 +583,7 @@ pub const Tab = extern struct {
         // A non-null tab_prefix (Ptyxis-style) is prepended UNLESS a
         // tab_override is present (override fully replaces).
         const plain = plain: {
-            const default = "Ghostty";
+            const default = "Blueshell";
             const config_title: ?[*:0]const u8 = title: {
                 const config = config_ orelse break :title null;
                 break :title config.get().title orelse null;

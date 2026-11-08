@@ -7,11 +7,11 @@ of these files, this is your map.
 If a file isn't listed here, our changes there are additions in new
 locations and conflict only by coincidence — read the diff.
 
-**Scope.** This map covers upstream files under `src/`, plus
-`.gitignore`. The fork also patches twelve upstream workflows under
-`.github/workflows/` and two upstream docs (`README.md`, `HACKING.md`);
-those conflict on rebase like anything else, and whether they belong in
-this map is an open question — see issue #55.
+**Scope.** This map covers every upstream Ghostty file modified in
+`ptyxis-port` (including source files under `src/`, root configurations
+and documentation, flatpak manifests, and workflows under
+`.github/workflows/`). `scripts/check-conflict-hotspots.sh` enforces
+that every upstream file modified by the fork is listed here.
 
 When upstreaming a hotspot makes a downstream patch unnecessary
 (issue #6 is the canonical example), delete the entry from this file
@@ -99,6 +99,8 @@ implementation.
 **What we added:** `externalMasterFd` calls
 `Application.default().takePendingExternalMasterFd()`. Foreground-agent
 detection also reads the PTY master directly from the adopt backend.
+`sendDesktopNotification` defaults an empty title to `"Blueshell"` and
+uses `"org.tunaos.blueshell"` as the notification icon.
 
 ---
 
@@ -109,19 +111,19 @@ detection also reads the PTY master directly from the adopt backend.
 - New imports: `ContainerClient`, `Container`, `palette_mod`,
   `preferences_window`, `config_bridge`.
 - Private struct gains: `container_client`, `container_model`,
-  `pending_external_master_fd`, `pending_container_title`,
-  `pending_container_icon`.
+  `pending_container_spawn` (`PendingContainerSpawn` ownership transaction),
+  `next_container_spawn_token`.
 - New methods: `containerModel`, `containerClient`,
-  `setPendingExternalMasterFd` / `takePendingExternalMasterFd`,
-  `setPendingContainerTabMetadata` /
-  `takePendingContainerTabTitle` / `takePendingContainerTabIcon`,
+  `allocContainerSpawnToken`, `setPendingContainerSpawn`,
+  `takePendingContainerMasterFd`, `takePendingContainerMetadata`,
+  `abortPendingContainerSpawn`,
   `startupContainerClient`, `resolveAgentPath`.
 - Startup hook to call `startupContainerClient` so the agent is
   reachable before any window opens.
 - New actions: `preferences`.
 - Smoke-test env hooks (`GHOSTTY_PTYXIS_TEST_*`).
-- Force-analysis comptime block listing all `ContainerClient` methods
-  we want eagerly analyzed.
+- Force-analysis comptime block listing all `ContainerClient` and
+  `PendingContainerSpawn` methods we want eagerly analyzed.
 
 **Why it can break:** upstream churns the actions array, the Private
 struct, the startup sequence, and Ghostty-action handlers all
@@ -149,9 +151,11 @@ the comptime block are leaf additions — keep them.
   `Application.containerModel` and sets it on both split buttons.
 - `spawnInContainerById` + `actionNewTabInContainer` + helpers
   (`PtsLibc` extern block, `smokeSpawnInContainer`).
-- After `performBindingAction(.new_tab)` in
-  `actionNewTabInContainer`, we apply the pending container title +
-  icon to the freshly-selected `Adw.TabPage`.
+- `actionNewTabInContainer` allocates a container spawn token, initiates
+  the spawn transaction with `errdefer compat_fd.close(master_fd)`,
+  and spawns the new tab page carrying `.container_spawn_token = token`.
+  After tab creation, pending container metadata is applied to the
+  freshly-selected `Adw.TabPage` and transaction resources are finalized.
 
 **Why it can break:** upstream redesigns the new-tab dropdown, the
 actions array, or the action wiring.
@@ -159,7 +163,7 @@ actions array, or the action wiring.
 **Resolution recipe:** new actions in the array are additions. The
 container-spawn logic is self-contained at the end of the file —
 move it as a block if upstream restructured. The
-`performBindingAction(.new_tab)` → `getSelectedPage` → setTitle/setIcon
+`newTabPage` → `getSelectedPage` → setTitle/setIcon
 sequence depends on `tab_view.setSelectedPage(page)` being called
 synchronously by `newTabPage` (line ~484 currently). If upstream makes
 new-tab async, this will need a signal handler on
@@ -342,10 +346,41 @@ re-exports.
 
 ---
 
+## `src/build/docker/debian/Dockerfile` — LOW risk
+
+**What we added:** Checksum verification of the downloaded Zig
+toolchain tarball (blueshell#41) — a per-architecture `sha256sum -c`
+against a pinned digest before extraction, replacing an unauthenticated
+`curl` + `tar`.
+
+**Why it can break:** Upstream bumping the pinned Zig version (via
+`build.zig.zon`'s `minimum_zig_version`) needs a matching digest update
+here, or the build fails closed on a checksum mismatch.
+
+**Resolution recipe:** Preserve the `case`/checksum block after the
+`ZIG_VERSION` extraction, keep `curl -fsSL` (fail-closed, silent) in
+place of upstream's bare `curl -L`, and update the `x86_64`/`aarch64`
+SHA-256 pins if upstream's Zig version changed.
+
+---
+
+## `src/build/docker/lib-c-docs/Dockerfile` — LOW risk
+
+**What we added:** Digest-pin the `archlinux:latest` base image
+(blueshell#28) — `archlinux` is a rolling release, so a mutable tag lets
+the same commit build a different image on every run.
+
+**Resolution recipe:** Retain the `@sha256:...` digest pin on the
+`FROM --platform=linux/amd64 archlinux ...` line.
+
+---
+
 ## `.gitignore` — LOW risk
 
 **What we added:** `zig-pkg/` to keep the vendored package cache out
 of commits.
+
+---
 
 ## `build.zig.zon` — LOW risk
 
@@ -358,6 +393,229 @@ Ghostty release we match).
 **Resolution recipe:** on conflict, keep OUR `.version` line. Never take
 upstream's `-dev` version, or the next tagged Flatpak build aborts.
 (`minimum_zig_version` is upstream's to bump — take theirs.)
+
+---
+
+## `AGENTS.md` — LOW risk
+
+**What we changed:** In "Issue and PR Guidelines", adjusted agent guidance
+to allow issues and PRs in `tuna-os/blueshell` (including upstream-sync PRs
+against `ptyxis-port`), while explicitly reminding agents never to open issues
+or PRs against upstream `ghostty-org/ghostty`.
+
+**Why it can break:** Upstream updates agent instructions or formatting.
+
+**Resolution recipe:** Retain Blueshell's repository-specific PR rules under
+`## Issue and PR Guidelines`.
+
+---
+
+## `CONTRIBUTING.md` — LOW risk
+
+**What we added:** The `## Contribute compute — no code needed` section
+(linking to `https://hub.tunaos.org/#contribute`) and the
+`<!-- hive-contribute-plea -->` comment.
+
+**Why it can break:** Upstream rewrites intro sections or contribution policies.
+
+**Resolution recipe:** Preserve the contribute compute section above
+"The Critical Rule".
+
+---
+
+## `HACKING.md` — MEDIUM risk
+
+**What we changed:** Rewrote the top half for Blueshell development:
+introduced the `ptyxis-port` branch, building with GTK/libadwaita and Ptyxis
+agent dependencies, the testing architecture, and the contribute-compute appeal,
+while delegating the remainder to upstream's developer guide.
+
+**Why it can break:** Upstream updates build commands, dependencies, or
+document layout.
+
+**Resolution recipe:** Preserve Blueshell-specific building and architecture
+notes at the top; incorporate any upstream build system updates below.
+
+---
+
+## `README.md` — MEDIUM risk
+
+**What we changed:** Complete rebranding from Ghostty to Blueshell: title,
+description, screenshots, container integration features, Flatpak installation
+commands from the TunaOS repository, and development instructions.
+
+**Why it can break:** Upstream rewrites README badges, download links, or
+feature matrices.
+
+**Resolution recipe:** Keep Blueshell branding, features, screenshots, and
+installation instructions.
+
+---
+
+## `flatpak/com.mitchellh.ghostty-debug.yml` — LOW risk
+
+**What we changed:** Added `--filesystem=home:ro` finish-arg and explanatory
+comments for host `~/.config/ghostty` reading in Flatpak.
+
+**Why it can break:** Upstream updates finish-args or permissions.
+
+**Resolution recipe:** Ensure `--filesystem=home:ro` remains present.
+
+---
+
+## `flatpak/com.mitchellh.ghostty.yml` — LOW risk
+
+**What we changed:** Removed upstream's stock manifest in favor of the
+repo-owned pinned manifest in `flatpak/ghostty-stock/com.mitchellh.ghostty.yml`
+(issues #105, #117).
+
+**Why it can break:** Upstream changes or adds files in `flatpak/`.
+
+**Resolution recipe:** Keep this file deleted; Blueshell manages stock
+Ghostty flatpak packaging under `flatpak/ghostty-stock/`.
+
+---
+
+## `.github/workflows/clean-artifacts.yml` — LOW risk
+
+**What we changed:** Set workflow-level `permissions: contents: read` and
+granted `actions: write` only on the `remove-old-artifacts` job (#183) so the
+artifact cleanup action can run.
+
+**Resolution recipe:** Keep the read-only top-level block and the job-level
+`actions: write`.
+
+---
+
+## `.github/workflows/flatpak.yml` + `.github/workflows/publish-tag.yml` + `.github/workflows/snap.yml` — LOW risk
+
+**What we changed:** Added a top-level `permissions: contents: read` block
+(#163). The same block was added to most other inherited workflows listed
+here.
+
+**Resolution recipe:** Keep the top-level read-only `permissions` block when
+taking upstream changes to these workflows.
+
+---
+
+## `.github/workflows/milestone.yml` — LOW risk
+
+**What we changed:** Switched `runs-on` from upstream's custom
+`namespace-profile-ghostty-sm` to standard GitHub-hosted `ubuntu-latest`, added
+`timeout-minutes: 10`, and added PR concurrency group.
+
+**Resolution recipe:** Retain `runs-on: ubuntu-latest`, timeout, and
+concurrency settings.
+
+---
+
+## `.github/workflows/nix.yml` + `.github/workflows/update-colorschemes.yml` — LOW risk
+
+**What we changed:** Updated `cachix/install-nix-action` to v31.11.3.
+
+**Resolution recipe:** Keep compatible action pin.
+
+---
+
+## `.github/workflows/release-tag.yml` — LOW risk
+
+**What we changed:** Removed the tag push trigger so upstream's macOS signing
+pipeline (Sparkle, notarization, Sentry, R2) does not run on Blueshell releases
+(which ship via `publish-flatpak.yml`), and updated `cachix/install-nix-action`.
+
+**Resolution recipe:** Keep tag trigger commented out on upstream macOS release
+flow.
+
+---
+
+## `.github/workflows/release-tip.yml` — LOW risk
+
+**What we changed:** Updated `cachix/install-nix-action` to v31.11.3 and
+maintained rolling release packaging for Blueshell.
+
+**Resolution recipe:** Retain updated action pins.
+
+---
+
+## `.github/workflows/test.yml` — MEDIUM risk
+
+**What we changed:** Switched runners from custom Namespace profiles to
+standard GitHub-hosted `ubuntu-latest`, updated `cachix/install-nix-action` pins,
+and bypassed macOS signing and upstream secret-dependent jobs.
+
+**Why it can break:** Upstream frequently updates `test.yml` test matrices,
+dependencies, or runner configurations.
+
+**Resolution recipe:** Retain standard runner (`ubuntu-latest`) assignments and
+action versions.
+
+---
+
+## `.github/workflows/vouch-check-issue.yml` + `.github/workflows/vouch-check-pr.yml` + `.github/workflows/vouch-manage-by-discussion.yml` + `.github/workflows/vouch-manage-by-issue.yml` + `.github/workflows/vouch-sync-codeowners.yml` — LOW risk
+
+**What we changed:** Switched `runs-on` from `namespace-profile-ghostty-xsm` to
+`ubuntu-latest`, added `timeout-minutes: 10`, updated
+`actions/create-github-app-token` to v3.3.0, and added a concurrency group to
+`vouch-check-pr.yml`.
+
+**Resolution recipe:** Retain `runs-on: ubuntu-latest`, `timeout-minutes`,
+concurrency, and updated action pins.
+---
+
+## `src/apprt/gtk/class/Overrides.zig` — MEDIUM risk
+
+**What we added:** `container_spawn_token: ?u64 = null` plus its entry
+in `Overrides.none` (#174). The token hands a freshly created surface
+the claim to a stashed container-spawn transaction (master fd and
+title/icon metadata).
+
+**Why it can break:** upstream changes the `Overrides` fields, the
+`parse` function, or any `newTabPage` call site — every `Overrides`
+literal must keep compiling, and new call sites that should carry a
+spawn token need the field threaded through.
+
+**Resolution recipe:** keep the `container_spawn_token` field and its
+`none` entry; thread it through any new `Overrides` literals or
+`newTabPage`/`newTabForWindow` call sites upstream adds.
+
+---
+
+## `src/apprt/gtk/class/split_tree.zig` — MEDIUM risk
+
+**What we added:** pass `.container_spawn_token` through when creating
+the surface (#174), so splits of a container-spawned tab keep the token.
+
+**Why it can break:** upstream refactors surface creation in `SplitTree`.
+
+**Resolution recipe:** keep the field passthrough alongside the other
+`overrides.*` fields.
+
+---
+
+## `src/main_ghostty.zig` — LOW risk
+
+**What we added:** import `WorkerLifecycle` in the `test` block (#187).
+
+**Why it can break:** upstream renames test files or reshuffles the
+test block.
+
+**Resolution recipe:** keep the import; drop it if upstream absorbs the
+worker-lifecycle tests.
+
+---
+
+## `.github/pinact.yml` — LOW risk
+
+**What we changed:** removed the `ignore_actions` exception for
+`DeterminateSystems/nix-installer-action`, so pinact pins it like every
+other action (#188).
+
+**Why it can break:** upstream edits `pinact.yml`.
+
+**Resolution recipe:** keep the exception removed; resolve any pin-SHA
+drift by re-running pinact. (Workflow files' place in this map is
+otherwise still open — see issue #55.)
+
 ---
 
 ## Files we DON'T touch (assert this on rebase)
