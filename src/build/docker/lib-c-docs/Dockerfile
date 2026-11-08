@@ -4,7 +4,7 @@
 # Base images are digest-pinned (blueshell#28): archlinux is a rolling
 # release and nginx:alpine floats — mutable refs make the same commit build
 # different images and let a bad :latest push silently change what ships.
-FROM --platform=linux/amd64 archlinux@sha256:363129b67b2bc6c5a634f8fb4961a7e2eba213a2ec075d159127b1260290a722 AS builder
+FROM --platform=linux/amd64 archlinux@sha256:dfc5be7be44cf1acf3d9b3b902e3e9c8a29f97ed41e35631823cdc9c97e5d4f0 AS builder
 
 # Build argument for noindex header
 ARG ADD_NOINDEX_HEADER=false
@@ -27,7 +27,7 @@ RUN doxygen
 #--------------------------------------------------------------------
 # Host the static HTML
 #--------------------------------------------------------------------
-FROM nginx@sha256:6c7972b94d62ce93357d1e0d0ef6d3db8a2e9b8b6f3234d943d60ecbc4f4eb31 AS runtime
+FROM nginx@sha256:8e0328743c8e52ead9fac9c198d0893d63cd38e41b1d9ea629e092a8ac229a93 AS runtime
 
 # Pass build arg to runtime stage
 ARG ADD_NOINDEX_HEADER=false

@@ -16,9 +16,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+  contents: read
 
 concurrency:
   group: upstream-sync
@@ -28,10 +26,14 @@ jobs:
   rebase:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
 
     steps:
       - name: Checkout ptyxis-port
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ptyxis-port
           fetch-depth: 0

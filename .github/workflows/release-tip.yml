@@ -18,6 +18,9 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   setup:
     if: |
@@ -42,7 +45,7 @@ jobs:
         with:
           path: |
             /nix
-      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -137,8 +140,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install sentry-cli
+        env:
+          SENTRY_CLI_VERSION: 2.57.0
+          SENTRY_INSTALLER_SHA256: 526cc0111370d37fda6c8c16b338ae3d341028adb6cebd8e9e0c1077a8421ba0
         run: |
-          curl -sL https://sentry.io/get-cli/ | bash
+          installer="${RUNNER_TEMP}/install-sentry-cli.sh"
+          curl --fail --show-error --silent --location \
+            --output "$installer" https://sentry.io/get-cli/
+          echo "${SENTRY_INSTALLER_SHA256}  ${installer}" | sha256sum --check --strict
+          bash "$installer"
 
       - name: Download dSYM
         run: |
@@ -160,8 +170,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install sentry-cli
+        env:
+          SENTRY_CLI_VERSION: 2.57.0
+          SENTRY_INSTALLER_SHA256: 526cc0111370d37fda6c8c16b338ae3d341028adb6cebd8e9e0c1077a8421ba0
         run: |
-          curl -sL https://sentry.io/get-cli/ | bash
+          installer="${RUNNER_TEMP}/install-sentry-cli.sh"
+          curl --fail --show-error --silent --location \
+            --output "$installer" https://sentry.io/get-cli/
+          echo "${SENTRY_INSTALLER_SHA256}  ${installer}" | sha256sum --check --strict
+          bash "$installer"
 
       - name: Download dSYM
         run: |
@@ -183,8 +200,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install sentry-cli
+        env:
+          SENTRY_CLI_VERSION: 2.57.0
+          SENTRY_INSTALLER_SHA256: 526cc0111370d37fda6c8c16b338ae3d341028adb6cebd8e9e0c1077a8421ba0
         run: |
-          curl -sL https://sentry.io/get-cli/ | bash
+          installer="${RUNNER_TEMP}/install-sentry-cli.sh"
+          curl --fail --show-error --silent --location \
+            --output "$installer" https://sentry.io/get-cli/
+          echo "${SENTRY_INSTALLER_SHA256}  ${installer}" | sha256sum --check --strict
+          bash "$installer"
 
       - name: Download dSYM
         run: |
@@ -219,7 +243,7 @@ jobs:
           path: |
             /nix
             /zig
-      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -274,7 +298,7 @@ jobs:
           path: |
             /nix
             /zig
-      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -353,7 +377,7 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@33c9ab3ef95cd57c164d9d6eb1f9a46338538d41
         with:
           determinate: true
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -436,7 +460,7 @@ jobs:
             /nix
             /zig
 
-      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -574,7 +598,7 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@33c9ab3ef95cd57c164d9d6eb1f9a46338538d41
         with:
           determinate: true
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -830,7 +854,7 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@33c9ab3ef95cd57c164d9d6eb1f9a46338538d41
         with:
           determinate: true
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -1027,7 +1051,7 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@33c9ab3ef95cd57c164d9d6eb1f9a46338538d41
         with:
           determinate: true
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17

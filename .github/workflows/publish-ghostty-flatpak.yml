@@ -40,11 +40,7 @@ on:
       - flatpak/ghostty-stock/**
       - .github/workflows/publish-ghostty-flatpak.yml
 permissions:
-  # Must cover the reusable workflow's own block (contents: write,
-  # packages: write): a caller granting less fails every run at startup
-  # with no jobs and no error detail (seen 2026-10-11).
-  contents: write
-  packages: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -56,6 +52,10 @@ jobs:
     # own ghcr namespace, and -- if it also carried FLATPAK_INDEX_TOKEN --
     # would write an image nobody in the org built into the shared index.
     if: github.repository == 'tuna-os/blueshell'
+    # The called workflow requires both permissions, including on PR runs.
+    permissions:
+      contents: write
+      packages: write
     uses: tuna-os/.github/.github/workflows/publish-flatpak.yml@main
     with:
       app-id: com.mitchellh.ghostty
