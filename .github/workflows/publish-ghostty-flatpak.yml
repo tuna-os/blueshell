@@ -13,9 +13,9 @@ name: Publish Ghostty Flatpak
 #
 # This lives in blueshell rather than in a tuna-os/ghostty fork because a
 # fork would be a repo whose only original content is this file, with a
-# second FLATPAK_INDEX_TOKEN to provision and an upstream-sync mechanism to
-# maintain. The registry path and index entry are still ghostty's own
-# (tuna-os/ghostty), separate from blueshell's.
+# second index credential (FLATPAK_INDEX_DEPLOY_KEY) to provision and an
+# upstream-sync mechanism to maintain. The registry path and index entry are
+# still ghostty's own (tuna-os/ghostty), separate from blueshell's.
 #
 # The body is the canonical tuna-os pipeline in tuna-os/.github, the same
 # reusable workflow finupdate, mariner, mandelbrot, dualcut and the four
@@ -57,19 +57,19 @@ concurrency:
 jobs:
   publish:
     # Forks don't publish. A fork running this on dispatch would push to its
-    # own ghcr namespace, and -- if it also carried FLATPAK_INDEX_TOKEN --
+    # own ghcr namespace, and -- if it also carried FLATPAK_INDEX_DEPLOY_KEY --
     # would write an image nobody in the org built into the shared index.
     # NOTE: `github.repository` is always the base repo, even for fork PRs,
     # so compare the PR head repo instead. Secrets forwarded via
-    # `secrets: inherit` (e.g. FLATPAK_INDEX_TOKEN, required by the called
-    # workflow) are unavailable on cross-repo PRs, which would otherwise
-    # fail here instead of skipping.
+    # `secrets: inherit` (e.g. FLATPAK_INDEX_DEPLOY_KEY, the docs deploy key
+    # the called workflow pushes the index with) are unavailable on
+    # cross-repo PRs, so a fork PR is skipped rather than run without them.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # The called workflow requires both permissions, including on PR runs.
     permissions:
       contents: write
       packages: write
-    uses: tuna-os/.github/.github/workflows/publish-flatpak.yml@fded0603d7e383990e8259141419fe6c1d641f41 # tuna-os/.github main, 2026-10-31
+    uses: tuna-os/.github/.github/workflows/publish-flatpak.yml@4078f531ac74703f203bde835ef6c25e9321b97b # main
     with:
       app-id: com.mitchellh.ghostty
       manifest-path: flatpak/ghostty-stock/com.mitchellh.ghostty.yml
