@@ -60,8 +60,8 @@ jobs:
     # own ghcr namespace, and -- if it also carried FLATPAK_INDEX_DEPLOY_KEY --
     # would write an image nobody in the org built into the shared index.
     # NOTE: `github.repository` is always the base repo, even for fork PRs,
-    # so compare the PR head repo instead. Secrets forwarded via
-    # `secrets: inherit` (e.g. FLATPAK_INDEX_DEPLOY_KEY, the docs deploy key
+    # so compare the PR head repo instead. The secrets forwarded below
+    # (FLATPAK_INDEX_DEPLOY_KEY, the docs deploy key
     # the called workflow pushes the index with) are unavailable on
     # cross-repo PRs, so a fork PR is skipped rather than run without them.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -98,7 +98,10 @@ jobs:
       # FlatPark needs /app-tree tarballs, not .flatpak bundles. The jobs
       # below export the shared build's OCI artifacts into a separate release.
       attach-bundles: false
-    secrets: inherit
+    # The only secrets the called workflow declares and reads.
+    secrets:
+      FLATPAK_INDEX_DEPLOY_KEY: ${{ secrets.FLATPAK_INDEX_DEPLOY_KEY }}
+      FLATPAK_INDEX_TOKEN: ${{ secrets.FLATPAK_INDEX_TOKEN }}
 
   export-tarballs:
     name: Export Ghostty release (${{ matrix.arch }})
@@ -111,10 +114,10 @@ jobs:
       matrix:
         arch: [x86_64, aarch64]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: oci-${{ matrix.arch }}
           path: oci
@@ -132,7 +135,7 @@ jobs:
             --oci oci --arch "$ARCH" --source-commit "$GITHUB_SHA" \
             --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
             --manifest flatpak/ghostty-stock/com.mitchellh.ghostty.yml --output release
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: ghostty-release-${{ matrix.arch }}
           path: release/*
@@ -150,10 +153,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      - uses: actions/download-artifact@v8.0.2
         with:
           pattern: ghostty-release-*
           path: release
