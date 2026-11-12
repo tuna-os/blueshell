@@ -618,6 +618,34 @@ otherwise still open — see issue #55.)
 
 ---
 
+## `.github/dependabot.yml` — LOW risk
+
+**What we changed:** added `cooldown: default-days: 7` to the
+`github-actions` entry, so Dependabot waits 7 days before it takes a new
+action release.
+
+**Why it can break:** upstream edits `dependabot.yml`.
+
+**Resolution recipe:** keep the cooldown block.
+
+---
+
+## `.github/workflows/actions.lock` — LOW risk
+
+**What we added:** the GitHub Actions lockfile (`gh actions-lock`). Our
+workflows use exact tag refs, such as `actions/checkout@v7.0.1`, and the
+lockfile pins each tag to a commit. `actions-security.yml` fails when the
+lockfile does not match the workflows. Inherited workflows also carry
+zizmor fixes and inline `# zizmor: ignore[...]` comments.
+
+**Why it can break:** upstream workflows pin actions to commit SHAs, so
+each sync conflicts on `uses:` lines.
+
+**Resolution recipe:** take our tag refs, keep the zizmor changes, then
+run `gh actions-lock` and commit the updated lockfile.
+
+---
+
 ## Files we DON'T touch (assert this on rebase)
 
 - `src/main.zig`

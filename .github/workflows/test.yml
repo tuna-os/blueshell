@@ -33,8 +33,10 @@ jobs:
       zig: ${{ steps.filter_any.outputs.zig }}
 
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@v4.0.3
         id: filter_every
         with:
           token: ""
@@ -43,7 +45,7 @@ jobs:
             code:
               - '**'
               - '!.github/VOUCHED.td'
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+      - uses: dorny/paths-filter@v4.0.3
         id: filter_any
         with:
           token: ""
@@ -73,8 +75,10 @@ jobs:
 
       - id: determine
         name: Determine skip
+        env:
+          CODE_CHANGED: ${{ steps.filter_every.outputs.code }}
         run: |
-          if [ "${{ steps.filter_every.outputs.code }}" = "false" ]; then
+          if [ "$CODE_CHANGED" = "false" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -150,8 +154,10 @@ jobs:
           } | tee -a "$GITHUB_OUTPUT"
       - if: always() && steps.status.outputs.result != 'success'
         name: Check for failed status
+        env:
+          RESULTS: ${{ steps.status.outputs.results }}
         run: |
-          echo "One or more required build workflows failed: ${{ steps.status.outputs.results }}"
+          echo "One or more required build workflows failed: $RESULTS"
           exit 1
 
   build-bench:
@@ -163,20 +169,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -194,7 +202,9 @@ jobs:
       swift: ${{ steps.list.outputs.swift }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - id: list
         name: List example directories
         run: |
@@ -221,27 +231,31 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       - name: Build Example
+        env:
+          EXAMPLE_DIR: ${{ matrix.dir }}
         run: |
-          cd example/${{ matrix.dir }}
+          cd "example/$EXAMPLE_DIR"
           nix develop -c zig build
 
   build-example-zig-vt-macos-no-sdk:
@@ -253,10 +267,12 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /Users/runner/zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           cache: |
             xcode
@@ -264,10 +280,10 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e
+      - uses: DeterminateSystems/nix-installer-action@main
         with:
           determinate: true
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -289,27 +305,31 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       - name: Build Example
+        env:
+          EXAMPLE_DIR: ${{ matrix.dir }}
         run: |
-          cd example/${{ matrix.dir }}
+          cd "example/$EXAMPLE_DIR"
           nix develop -c cmake -B build -DFETCHCONTENT_SOURCE_DIR_GHOSTTY=${{ github.workspace }}
           nix develop -c cmake --build build
 
@@ -329,15 +349,19 @@ jobs:
     needs: [test, list-examples]
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        uses: mlugg/setup-zig@v2.2.1
 
       - name: Build Example
         shell: pwsh
+        env:
+          EXAMPLE_DIR: ${{ matrix.dir }}
         run: |
-          cd example/${{ matrix.dir }}
+          cd "example/$env:EXAMPLE_DIR"
           cmake -B build -DFETCHCONTENT_SOURCE_DIR_GHOSTTY=${{ github.workspace }}
           cmake --build build
 
@@ -354,10 +378,12 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /Users/runner/zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           cache: |
             xcode
@@ -365,10 +391,10 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e
+      - uses: DeterminateSystems/nix-installer-action@main
         with:
           determinate: true
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -383,8 +409,10 @@ jobs:
         run: test -f zig-out/lib/ghostty-vt.xcframework/Info.plist
 
       - name: Build and Run Example
+        env:
+          EXAMPLE_DIR: ${{ matrix.dir }}
         run: |
-          cd example/${{ matrix.dir }}
+          cd "example/$EXAMPLE_DIR"
           swift run
 
   build-cmake:
@@ -395,20 +423,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -433,20 +463,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -550,20 +582,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -584,20 +618,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -628,20 +664,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -666,19 +704,21 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -698,20 +738,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -789,20 +831,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -853,10 +897,12 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /Users/runner/zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           cache: |
             xcode
@@ -864,10 +910,10 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e
+      - uses: DeterminateSystems/nix-installer-action@main
         with:
           determinate: true
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -902,26 +948,28 @@ jobs:
       ANDROID_NDK_VERSION: r29
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       - name: Setup Android NDK
-        uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
+        uses: nttld/setup-ndk@v1.6.0
         id: setup-ndk
         with:
           ndk-version: r29
@@ -942,10 +990,12 @@ jobs:
     needs: test
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        uses: mlugg/setup-zig@v2.2.1
 
       - name: Test libghostty-vt
         run: zig build test-lib-vt
@@ -994,20 +1044,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1023,20 +1075,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1056,20 +1110,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1138,20 +1194,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1164,7 +1222,7 @@ jobs:
 
       - name: Upload artifact
         id: upload-artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: source-tarball
           path: |-
@@ -1178,20 +1236,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1221,17 +1281,21 @@ jobs:
     needs: [build-dist, build-snap]
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Trigger Snap workflow
         run: |
           gh workflow run \
             snap.yml \
-            --ref ${{ github.ref_name || 'main' }} \
+            --ref "$REF" \
             --field source-run-id=${{ github.run_id }} \
-            --field source-artifact-id=${{ needs.build-dist.outputs.artifact-id }}
+            --field source-artifact-id="$ARTIFACT_ID"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ github.ref_name || 'main' }}
+          ARTIFACT_ID: ${{ needs.build-dist.outputs.artifact-id }}
 
   trigger-flatpak:
     if: github.event_name != 'pull_request'
@@ -1242,17 +1306,21 @@ jobs:
     needs: [build-dist, build-flatpak]
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Trigger Flatpak workflow
         run: |
           gh workflow run \
             flatpak.yml \
-            --ref ${{ github.ref_name || 'main' }} \
+            --ref "$REF" \
             --field source-run-id=${{ github.run_id }} \
-            --field source-artifact-id=${{ needs.build-dist.outputs.artifact-id }}
+            --field source-artifact-id="$ARTIFACT_ID"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ github.ref_name || 'main' }}
+          ARTIFACT_ID: ${{ needs.build-dist.outputs.artifact-id }}
 
   # build-nix-macos:
   #   runs-on: namespace-profile-ghostty-macos-tahoe
@@ -1314,10 +1382,12 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /Users/runner/zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           cache: |
             xcode
@@ -1325,10 +1395,10 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e
+      - uses: DeterminateSystems/nix-installer-action@main
         with:
           determinate: true
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1346,7 +1416,9 @@ jobs:
       # GhosttyKit is the framework that is built from Zig for our native
       # Mac app to access.
       - name: Build GhosttyKit
-        run: nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Demit-macos-app=false
+        env:
+          ZIG_DEPS: ${{ steps.deps.outputs.deps }}
+        run: nix develop -c zig build --system "$ZIG_DEPS" -Demit-macos-app=false
 
       # The native app is built with native Xcode tooling. This also does
       # codesigning. IMPORTANT: this must NOT run in a Nix environment.
@@ -1366,10 +1438,12 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /Users/runner/zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           cache: |
             xcode
@@ -1377,10 +1451,10 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e
+      - uses: DeterminateSystems/nix-installer-action@main
         with:
           determinate: true
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1396,7 +1470,9 @@ jobs:
         run: nix build -L .#deps && echo "deps=$(readlink ./result)" >> $GITHUB_OUTPUT
 
       - name: Build with Xcode 27
-        run: nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Demit-macos-app=false
+        env:
+          ZIG_DEPS: ${{ steps.deps.outputs.deps }}
+        run: nix develop -c zig build --system "$ZIG_DEPS" -Demit-macos-app=false
 
   build-macos-freetype:
     runs-on: namespace-profile-ghostty-macos-tahoe
@@ -1406,10 +1482,12 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /Users/runner/zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           cache: |
             xcode
@@ -1417,10 +1495,10 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e
+      - uses: DeterminateSystems/nix-installer-action@main
         with:
           determinate: true
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1438,12 +1516,16 @@ jobs:
       # We run tests with an empty test filter so it runs all unit tests
       # but skips Xcode tests
       - name: Test All
+        env:
+          ZIG_DEPS: ${{ steps.deps.outputs.deps }}
         run: |
-          nix develop -c zig build test --system ${{ steps.deps.outputs.deps }} -Drenderer=metal -Dfont-backend=coretext_freetype -Dtest-filter=""
+          nix develop -c zig build test --system "$ZIG_DEPS" -Drenderer=metal -Dfont-backend=coretext_freetype -Dtest-filter=""
 
       - name: Build All
+        env:
+          ZIG_DEPS: ${{ steps.deps.outputs.deps }}
         run: |
-          nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Demit-macos-app=false -Drenderer=metal -Dfont-backend=coretext_freetype
+          nix develop -c zig build --system "$ZIG_DEPS" -Demit-macos-app=false -Drenderer=metal -Dfont-backend=coretext_freetype
 
   test:
     if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true'
@@ -1456,7 +1538,9 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Get required Zig version
         id: zig
@@ -1464,17 +1548,17 @@ jobs:
           echo "version=$(sed -n -E 's/^\s*\.?minimum_zig_version\s*=\s*"([^"]+)".*/\1/p' build.zig.zon)" >> $GITHUB_OUTPUT
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1518,20 +1602,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1555,20 +1641,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1597,7 +1685,7 @@ jobs:
 
       - name: Upload log
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: esctest-log
           path: test/esctest/esctest.log
@@ -1609,18 +1697,20 @@ jobs:
     runs-on: namespace-profile-ghostty-xsm
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: /nix
 
       # Install Nix so the verifier uses the pinned compiler and runtimes.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1642,20 +1732,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1690,20 +1782,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1725,20 +1819,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1755,10 +1851,12 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /Users/runner/zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           cache: |
             xcode
@@ -1766,10 +1864,10 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e
+      - uses: DeterminateSystems/nix-installer-action@main
         with:
           determinate: true
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1785,7 +1883,9 @@ jobs:
         run: nix build -L .#deps && echo "deps=$(readlink ./result)" >> $GITHUB_OUTPUT
 
       - name: test
-        run: nix develop -c zig build test --system ${{ steps.deps.outputs.deps }}
+        env:
+          ZIG_DEPS: ${{ steps.deps.outputs.deps }}
+        run: nix develop -c zig build test --system "$ZIG_DEPS"
 
 
   test-i18n:
@@ -1801,20 +1901,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1832,20 +1934,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1877,17 +1981,19 @@ jobs:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1908,17 +2014,19 @@ jobs:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1938,17 +2046,19 @@ jobs:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1963,10 +2073,12 @@ jobs:
     needs: skip
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           cache: |
             xcode
@@ -1974,10 +2086,10 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e
+      - uses: DeterminateSystems/nix-installer-action@main
         with:
           determinate: true
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -1996,17 +2108,19 @@ jobs:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -2024,17 +2138,19 @@ jobs:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -2052,17 +2168,19 @@ jobs:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -2085,17 +2203,19 @@ jobs:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -2113,17 +2233,19 @@ jobs:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -2147,20 +2269,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -2176,13 +2300,13 @@ jobs:
     needs: [test, build-dist]
     steps:
       - name: Install and configure Namespace CLI
-        uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0.0.12
+        uses: namespacelabs/nscloud-setup@v0.0.12
 
       - name: Configure Namespace powered Buildx
-        uses: namespacelabs/nscloud-setup-buildx-action@d059ed7184f0bc7c8b27e8810cea153d02bcc6dd # v0.0.23
+        uses: namespacelabs/nscloud-setup-buildx-action@v0.0.23
 
       - name: Download Source Tarball Artifacts
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: source-tarball
 
@@ -2192,7 +2316,7 @@ jobs:
           tar --verbose --extract --strip-components 1 --directory dist --file ghostty-source.tar.gz
 
       - name: Build and push
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        uses: docker/build-push-action@v7.4.0
         with:
           context: dist
           file: dist/src/build/docker/debian/Dockerfile
@@ -2209,20 +2333,22 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        uses: namespacelabs/nscloud-cache-action@v1.7.0
         with:
           path: |
             /nix
             /zig
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@v31.11.3
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+      - uses: cachix/cachix-action@v17
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
