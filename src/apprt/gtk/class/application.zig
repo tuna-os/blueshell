@@ -2593,7 +2593,6 @@ pub const Application = extern struct {
     }
 };
 
-
 /// This sets various GTK-related environment variables as necessary
 /// given the runtime environment or configuration.
 ///
