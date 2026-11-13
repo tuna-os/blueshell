@@ -144,7 +144,15 @@ the comptime block are leaf additions — keep them.
 - Imports for `Container`, `gio`, `glib` already exist upstream — no
   new imports.
 - Private struct gains `new_tab_button`, `new_tab_button_compact`
-  template-child bindings (existing widgets we needed to grab).
+  template-child bindings (existing widgets we needed to grab), and one
+  `hamburger: window_menu.HamburgerMenu` field.
+- The Ptyxis-style hamburger menu (menu model, System / Light / Dark
+  style selector, zoom row) lives in the fork-owned
+  `window_menu.zig`. `window.zig` keeps only the call sites:
+  `priv.hamburger.init(...)` at the end of `init`,
+  `hamburger.syncThemeSelectors()` in `propConfig` and
+  `propMenuActive`, and `hamburger.setZoomText(...)` in
+  `updateZoomLabel`.
 - Actions array gains `new-tab-in-container`, `set-theme`, `zoom-in`,
   `zoom-out`, `zoom-reset`.
 - `refreshContainerMenu` builds a Gio.Menu from
