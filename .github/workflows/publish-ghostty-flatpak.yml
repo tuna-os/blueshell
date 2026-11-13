@@ -18,7 +18,7 @@ name: Publish Ghostty Flatpak
 # still ghostty's own (tuna-os/ghostty), separate from blueshell's.
 #
 # The body is the canonical tuna-os pipeline in tuna-os/.github, the same
-# reusable workflow finupdate, mariner, mandelbrot, dualcut and the four
+# reusable workflow mariner, mandelbrot, dualcut and the four
 # installer frontends call. This file is only the trigger policy.
 #
 # Bumping the pinned upstream: update `commit:` in
