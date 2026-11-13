@@ -30,7 +30,7 @@ workflows:
         - 'actions/download-artifact@v8.0.2'
         - 'actions/upload-artifact@v7.0.2'
         - 'flatpak/flatpak-github-actions@v6.8'
-        - 'tuna-os/.github@fded0603d7e383990e8259141419fe6c1d641f41'
+        - 'tuna-os/.github@main'
     '.github/workflows/publish-ghostty-flatpak.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@v8.0.2'
@@ -237,9 +237,9 @@ dependencies:
         commit: 'sha1-8a0cd651e5b2365bd640854a3fa5dfc70e4875f3'
         owner_id: 2242
         repo_id: 204253808
-    'tuna-os/.github@fded0603d7e383990e8259141419fe6c1d641f41':
+    'tuna-os/.github@main':
         ref: 'main'
-        commit: 'sha1-fded0603d7e383990e8259141419fe6c1d641f41'
+        commit: 'sha1-4f08bf7b295f70306352e0e865b7f3d5bc08d5f6'
         owner_id: 223733964
         repo_id: 1187761922
     'zizmorcore/zizmor-action@v0.8.1':

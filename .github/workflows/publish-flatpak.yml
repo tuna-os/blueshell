@@ -139,7 +139,7 @@ jobs:
             "docker://${IMAGE}:latest-aarch64"
 
       - name: Generate index snippet (x86_64)
-        uses: tuna-os/.github/.github/actions/update-flatpak-index@fded0603d7e383990e8259141419fe6c1d641f41
+        uses: tuna-os/.github/.github/actions/update-flatpak-index@main
         with:
           oci-dir: blueshell-x86_64.oci
           index-file: blueshell-index-snippet.json
@@ -148,7 +148,7 @@ jobs:
           require-appstream: "true"
 
       - name: Generate index snippet (aarch64)
-        uses: tuna-os/.github/.github/actions/update-flatpak-index@fded0603d7e383990e8259141419fe6c1d641f41
+        uses: tuna-os/.github/.github/actions/update-flatpak-index@main
         with:
           oci-dir: blueshell-aarch64.oci
           index-file: blueshell-index-snippet.json
@@ -186,7 +186,7 @@ jobs:
 
       - name: Update central index (x86_64)
         if: steps.central-index.outputs.enabled == 'true'
-        uses: tuna-os/.github/.github/actions/update-flatpak-index@fded0603d7e383990e8259141419fe6c1d641f41
+        uses: tuna-os/.github/.github/actions/update-flatpak-index@main
         with:
           oci-dir: blueshell-x86_64.oci
           index-file: index-repo/static/flatpak/index/static
@@ -196,7 +196,7 @@ jobs:
 
       - name: Update central index (aarch64)
         if: steps.central-index.outputs.enabled == 'true'
-        uses: tuna-os/.github/.github/actions/update-flatpak-index@fded0603d7e383990e8259141419fe6c1d641f41
+        uses: tuna-os/.github/.github/actions/update-flatpak-index@main
         with:
           oci-dir: blueshell-aarch64.oci
           index-file: index-repo/static/flatpak/index/static
