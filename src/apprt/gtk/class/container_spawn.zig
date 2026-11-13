@@ -230,4 +230,3 @@ test "PendingContainerSpawn: pre-handoff abort cleans up pipe" {
     const bytes_read = try std.posix.read(read_fd, &buf);
     try testing.expectEqual(@as(usize, 0), bytes_read);
 }
-
