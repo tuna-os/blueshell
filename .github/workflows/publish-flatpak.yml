@@ -15,7 +15,7 @@ name: Publish Flatpak
 # Push-triggered publishes gate on the repo living in the tuna-os org;
 # manual dispatch also works from forks: the image then goes to the fork
 # owner's ghcr namespace, and the tuna-os/docs index update runs when the
-# FLATPAK_INDEX_TOKEN secret is set.
+# FLATPAK_INDEX_DEPLOY_KEY (or legacy FLATPAK_INDEX_TOKEN) secret is set.
 
 on:
   push:
@@ -166,57 +166,38 @@ jobs:
           path: blueshell-index-snippet.json
           retention-days: 30
 
-      - name: Prepare central index (tuna-os/docs)
+      - name: Check central index credential
         id: central-index
         env:
+          FLATPAK_INDEX_DEPLOY_KEY: ${{ secrets.FLATPAK_INDEX_DEPLOY_KEY }}
           FLATPAK_INDEX_TOKEN: ${{ secrets.FLATPAK_INDEX_TOKEN }}
         run: |
-          if [ -z "$FLATPAK_INDEX_TOKEN" ]; then
-            echo "::notice::FLATPAK_INDEX_TOKEN not set — skipping tuna-os/docs index update."
-            echo "::notice::To publish into the remote: add a PAT with push access to tuna-os/docs as FLATPAK_INDEX_TOKEN and re-run, or merge the blueshell-index-snippet artifact's Results entry into tuna-os/docs:static/flatpak/index/static manually."
+          if [ -z "$FLATPAK_INDEX_DEPLOY_KEY" ] && [ -z "$FLATPAK_INDEX_TOKEN" ]; then
+            echo "::notice::Neither FLATPAK_INDEX_DEPLOY_KEY nor FLATPAK_INDEX_TOKEN is set — skipping tuna-os/docs index update."
+            echo "::notice::Merge the blueshell-index-snippet artifact's Results entry into tuna-os/docs:static/flatpak/index/static manually."
             exit 0
           fi
-          git clone --depth 1 \
-            https://github.com/tuna-os/docs.git \
-            index-repo
-          # Header-based auth so the token never lands in the remote URL.
-          git -C index-repo config --local http.extraheader \
-            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FLATPAK_INDEX_TOKEN" | base64 -w0)"
           echo "enabled=true" >> "$GITHUB_OUTPUT"
 
       - name: Update central index (x86_64)
         if: steps.central-index.outputs.enabled == 'true'
-        uses: tuna-os/.github/.github/actions/update-flatpak-index@main
+        uses: tuna-os/.github/.github/actions/publish-flatpak-index@4f08bf7b295f70306352e0e865b7f3d5bc08d5f6 # main
         with:
           oci-dir: blueshell-x86_64.oci
-          index-file: index-repo/static/flatpak/index/static
           repo-name: ${{ github.repository_owner }}/blueshell
           tags: latest
-          require-appstream: "true"
+          ssh-key: ${{ secrets.FLATPAK_INDEX_DEPLOY_KEY }}
+          token: ${{ secrets.FLATPAK_INDEX_TOKEN }}
 
       - name: Update central index (aarch64)
         if: steps.central-index.outputs.enabled == 'true'
-        uses: tuna-os/.github/.github/actions/update-flatpak-index@main
+        uses: tuna-os/.github/.github/actions/publish-flatpak-index@4f08bf7b295f70306352e0e865b7f3d5bc08d5f6 # main
         with:
           oci-dir: blueshell-aarch64.oci
-          index-file: index-repo/static/flatpak/index/static
           repo-name: ${{ github.repository_owner }}/blueshell
           tags: latest
-          require-appstream: "true"
-
-      - name: Publish central index
-        if: steps.central-index.outputs.enabled == 'true'
-        run: |
-          cd index-repo
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add static/flatpak/index/static
-          if git diff --cached --quiet; then
-            echo "No index changes"
-          else
-            git commit -m "chore(flatpak): update blueshell OCI index (x86_64 + aarch64)"
-            git push origin main
-          fi
+          ssh-key: ${{ secrets.FLATPAK_INDEX_DEPLOY_KEY }}
+          token: ${{ secrets.FLATPAK_INDEX_TOKEN }}
 
   release-bundles:
     name: Attach bundles to release
