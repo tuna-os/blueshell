@@ -141,6 +141,7 @@ jobs:
           zig build test -fno-sys=gtk4-layer-shell -Dtest-filter="bash"
           zig build test -fno-sys=gtk4-layer-shell -Dtest-filter="nushell"
           zig build test -fno-sys=gtk4-layer-shell -Dtest-filter="resolve:"
+          zig build test -fno-sys=gtk4-layer-shell -Dtest-filter="Adopt"
 
       - name: ptyxis-agent unit tests (VM providers)
         run: |
