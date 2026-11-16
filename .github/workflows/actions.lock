@@ -238,6 +238,11 @@ dependencies:
         commit: 'sha1-8a0cd651e5b2365bd640854a3fa5dfc70e4875f3'
         owner_id: 2242
         repo_id: 204253808
+    'tuna-os/.github@4f08bf7b295f70306352e0e865b7f3d5bc08d5f6':
+        ref: 'main'
+        commit: 'sha1-4f08bf7b295f70306352e0e865b7f3d5bc08d5f6'
+        owner_id: 223733964
+        repo_id: 1187761922
     'tuna-os/.github@main':
         ref: 'main'
         commit: 'sha1-4f08bf7b295f70306352e0e865b7f3d5bc08d5f6'
