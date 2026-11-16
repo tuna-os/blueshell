@@ -223,3 +223,77 @@ pub const ThreadData = union(Kind) {
         _ = config;
     }
 };
+
+/// Open a real PTY and wrap its master in an Adopt. Adopt only ever owns
+/// the master (the container side holds the slave), so drop our slave copy.
+fn testAdopt() !Adopt {
+    const pty = try Pty.open(.{});
+    _ = std.posix.system.close(pty.slave);
+    return .init(.{ .master_fd = pty.master });
+}
+
+test "adopt: init keeps the master and has no slave" {
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
+
+    var adopt = try testAdopt();
+    defer adopt.deinit();
+
+    try std.testing.expectEqual(adopt.master_fd, adopt.pty.master);
+    try std.testing.expectEqual(@as(Pty.Fd, -1), adopt.pty.slave);
+}
+
+test "adopt: resize applies the requested size to the pty" {
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
+
+    var adopt = try testAdopt();
+    defer adopt.deinit();
+
+    try adopt.resize(
+        .{ .columns = 120, .rows = 40 },
+        .{ .width = 1200, .height = 800 },
+    );
+    const ws = try adopt.pty.getSize();
+    try std.testing.expectEqual(@as(u16, 40), ws.ws_row);
+    try std.testing.expectEqual(@as(u16, 120), ws.ws_col);
+    try std.testing.expectEqual(@as(u16, 1200), ws.ws_xpixel);
+    try std.testing.expectEqual(@as(u16, 800), ws.ws_ypixel);
+}
+
+test "adopt: resize saturates pixel sizes that exceed u16" {
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
+
+    var adopt = try testAdopt();
+    defer adopt.deinit();
+
+    // Grid sizes are already u16 (CellCountInt), so only the u32 pixel
+    // dimensions can overflow the winsize fields.
+    try adopt.resize(
+        .{ .columns = std.math.maxInt(u16), .rows = std.math.maxInt(u16) },
+        .{ .width = std.math.maxInt(u32), .height = @as(u32, std.math.maxInt(u16)) + 1 },
+    );
+    const ws = try adopt.pty.getSize();
+    try std.testing.expectEqual(@as(u16, std.math.maxInt(u16)), ws.ws_row);
+    try std.testing.expectEqual(@as(u16, std.math.maxInt(u16)), ws.ws_col);
+    try std.testing.expectEqual(@as(u16, std.math.maxInt(u16)), ws.ws_xpixel);
+    try std.testing.expectEqual(@as(u16, std.math.maxInt(u16)), ws.ws_ypixel);
+}
+
+test "adopt: initTerminal pushes the terminal size to the pty" {
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
+
+    const alloc = std.testing.allocator;
+    var t = try terminal.Terminal.init(std.testing.io, alloc, .{ .cols = 90, .rows = 30 });
+    defer t.deinit(alloc);
+    t.width_px = 900;
+    t.height_px = 600;
+
+    var adopt = try testAdopt();
+    defer adopt.deinit();
+
+    adopt.initTerminal(&t);
+    const ws = try adopt.pty.getSize();
+    try std.testing.expectEqual(@as(u16, 30), ws.ws_row);
+    try std.testing.expectEqual(@as(u16, 90), ws.ws_col);
+    try std.testing.expectEqual(@as(u16, 900), ws.ws_xpixel);
+    try std.testing.expectEqual(@as(u16, 600), ws.ws_ypixel);
+}
