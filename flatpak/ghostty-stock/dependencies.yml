@@ -1,6 +1,6 @@
 # Vendored from ghostty-org/ghostty at the pinned ref recorded as
 # `commit:` in the ghostty module of com.mitchellh.ghostty.yml
-# (ef7edc4a24cf3ef0d6862276602e09f7b4b11b40).
+# (7597e85fd0c9c46716632c1a744f13690c1a3572).
 #
 # When bumping the pin: copy flatpak/dependencies.yml from the new ref
 # over this file, and do the same for zig-packages.json. Then diff the
