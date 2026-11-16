@@ -62,7 +62,7 @@ modules:
       # two vendored files noted in dependencies.yml.
       - type: git
         url: https://github.com/ghostty-org/ghostty.git
-        commit: ef7edc4a24cf3ef0d6862276602e09f7b4b11b40
+        commit: 7597e85fd0c9c46716632c1a744f13690c1a3572
 
       # Must be named exactly zig-packages.json: flatpak-builder only
       # downloads and unpacks the listed archives for that filename.
