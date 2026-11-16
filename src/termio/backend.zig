@@ -223,3 +223,58 @@ pub const ThreadData = union(Kind) {
         _ = config;
     }
 };
+
+test "adopt: init keeps master and marks slave as not owned" {
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
+
+    var pty = try Pty.open(.{});
+    _ = std.posix.system.close(pty.slave);
+
+    var adopt: Adopt = .init(.{ .master_fd = pty.master });
+    defer adopt.deinit();
+
+    try std.testing.expectEqual(pty.master, adopt.master_fd);
+    try std.testing.expectEqual(pty.master, adopt.pty.master);
+    try std.testing.expectEqual(@as(Pty.Fd, -1), adopt.pty.slave);
+}
+
+test "adopt: resize applies the requested size to the pty" {
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
+
+    var pty = try Pty.open(.{});
+    _ = std.posix.system.close(pty.slave);
+
+    var adopt: Adopt = .init(.{ .master_fd = pty.master });
+    defer adopt.deinit();
+
+    try adopt.resize(
+        .{ .columns = 120, .rows = 40 },
+        .{ .width = 1200, .height = 800 },
+    );
+    const ws = try adopt.pty.getSize();
+    try std.testing.expectEqual(@as(u16, 40), ws.ws_row);
+    try std.testing.expectEqual(@as(u16, 120), ws.ws_col);
+    try std.testing.expectEqual(@as(u16, 1200), ws.ws_xpixel);
+    try std.testing.expectEqual(@as(u16, 800), ws.ws_ypixel);
+}
+
+test "adopt: resize saturates pixel sizes that exceed u16" {
+    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
+
+    var pty = try Pty.open(.{});
+    _ = std.posix.system.close(pty.slave);
+
+    var adopt: Adopt = .init(.{ .master_fd = pty.master });
+    defer adopt.deinit();
+
+    const big = @as(u32, std.math.maxInt(u16)) + 1000;
+    try adopt.resize(
+        .{ .columns = std.math.maxInt(u16), .rows = std.math.maxInt(u16) },
+        .{ .width = big, .height = big },
+    );
+    const ws = try adopt.pty.getSize();
+    try std.testing.expectEqual(@as(u16, std.math.maxInt(u16)), ws.ws_row);
+    try std.testing.expectEqual(@as(u16, std.math.maxInt(u16)), ws.ws_col);
+    try std.testing.expectEqual(@as(u16, std.math.maxInt(u16)), ws.ws_xpixel);
+    try std.testing.expectEqual(@as(u16, std.math.maxInt(u16)), ws.ws_ypixel);
+}

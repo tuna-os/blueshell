@@ -130,6 +130,7 @@ jobs:
           zig build test -fno-sys=gtk4-layer-shell -Dtest-filter=profile_store
           zig build test -fno-sys=gtk4-layer-shell -Dtest-filter=preferences_logic
           zig build test -fno-sys=gtk4-layer-shell -Dtest-filter=agent_monitor
+          zig build test -fno-sys=gtk4-layer-shell -Dtest-filter="adopt:"
 
       # Flatpak host-path suites (issue #117 and the .zshrc follow-up).
       # The filters also match some upstream tests with the same words
