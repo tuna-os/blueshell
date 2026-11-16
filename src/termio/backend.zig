@@ -223,3 +223,168 @@ pub const ThreadData = union(Kind) {
         _ = config;
     }
 };
+
+fn skipAdoptTest() error{SkipZigTest}!void {
+    switch (builtin.os.tag) {
+        .windows, .ios => return error.SkipZigTest,
+        else => {},
+    }
+}
+
+const adopt_test_size: @import("../pty.zig").winsize = .{
+    .ws_row = 24,
+    .ws_col = 80,
+    .ws_xpixel = 0,
+    .ws_ypixel = 0,
+};
+
+test "Adopt init wraps the external master and has no slave" {
+    const testing = std.testing;
+    try skipAdoptTest();
+
+    const opened = try Pty.open(adopt_test_size);
+    defer _ = std.posix.system.close(opened.slave);
+
+    var adopt = Adopt.init(.{ .master_fd = opened.master });
+    defer adopt.deinit();
+
+    try testing.expectEqual(opened.master, adopt.master_fd);
+    try testing.expectEqual(opened.master, adopt.pty.master);
+    try testing.expectEqual(@as(Pty.Fd, -1), adopt.pty.slave);
+    try testing.expect(adopt.pty.tty_name == null);
+}
+
+test "Adopt resize sets the pty window size" {
+    const testing = std.testing;
+    try skipAdoptTest();
+
+    const opened = try Pty.open(adopt_test_size);
+    defer _ = std.posix.system.close(opened.slave);
+
+    var adopt = Adopt.init(.{ .master_fd = opened.master });
+    defer adopt.deinit();
+
+    try adopt.resize(
+        .{ .columns = 120, .rows = 40 },
+        .{ .width = 960, .height = 800 },
+    );
+
+    // Read back through the original Pty handle which shares the fd.
+    const ws = try opened.getSize();
+    try testing.expectEqual(@as(u16, 40), ws.ws_row);
+    try testing.expectEqual(@as(u16, 120), ws.ws_col);
+    try testing.expectEqual(@as(u16, 960), ws.ws_xpixel);
+    try testing.expectEqual(@as(u16, 800), ws.ws_ypixel);
+}
+
+test "Adopt resize clamps oversized pixel dimensions to u16 max" {
+    const testing = std.testing;
+    try skipAdoptTest();
+
+    const opened = try Pty.open(adopt_test_size);
+    defer _ = std.posix.system.close(opened.slave);
+
+    var adopt = Adopt.init(.{ .master_fd = opened.master });
+    defer adopt.deinit();
+
+    try adopt.resize(
+        .{ .columns = 10, .rows = 5 },
+        .{ .width = std.math.maxInt(u32), .height = @as(u32, std.math.maxInt(u16)) + 1 },
+    );
+
+    const ws = try opened.getSize();
+    try testing.expectEqual(@as(u16, 5), ws.ws_row);
+    try testing.expectEqual(@as(u16, 10), ws.ws_col);
+    try testing.expectEqual(@as(u16, std.math.maxInt(u16)), ws.ws_xpixel);
+    try testing.expectEqual(@as(u16, std.math.maxInt(u16)), ws.ws_ypixel);
+}
+
+test "Adopt resize on an invalid fd returns an error" {
+    const testing = std.testing;
+    try skipAdoptTest();
+
+    var adopt: Adopt = .{
+        .master_fd = -1,
+        .pty = .{ .master = -1, .slave = -1 },
+    };
+    try testing.expectError(
+        error.IoctlFailed,
+        adopt.resize(.{ .columns = 80, .rows = 24 }, .{ .width = 1, .height = 1 }),
+    );
+}
+
+test "Adopt initTerminal applies the terminal size to the pty" {
+    const testing = std.testing;
+    try skipAdoptTest();
+
+    const opened = try Pty.open(adopt_test_size);
+    defer _ = std.posix.system.close(opened.slave);
+
+    var adopt = Adopt.init(.{ .master_fd = opened.master });
+    defer adopt.deinit();
+
+    var t: terminal.Terminal = try .init(testing.io, testing.allocator, .{ .cols = 100, .rows = 30 });
+    defer t.deinit(testing.allocator);
+    t.width_px = 1000;
+    t.height_px = 600;
+
+    adopt.initTerminal(&t);
+
+    const ws = try opened.getSize();
+    try testing.expectEqual(@as(u16, 30), ws.ws_row);
+    try testing.expectEqual(@as(u16, 100), ws.ws_col);
+    try testing.expectEqual(@as(u16, 1000), ws.ws_xpixel);
+    try testing.expectEqual(@as(u16, 600), ws.ws_ypixel);
+}
+
+test "Adopt initTerminal swallows resize errors" {
+    const testing = std.testing;
+    try skipAdoptTest();
+
+    var adopt: Adopt = .{
+        .master_fd = -1,
+        .pty = .{ .master = -1, .slave = -1 },
+    };
+
+    var t: terminal.Terminal = try .init(testing.io, testing.allocator, .{ .cols = 80, .rows = 24 });
+    defer t.deinit(testing.allocator);
+
+    // Must only log a warning, not propagate or crash.
+    adopt.initTerminal(&t);
+}
+
+test "Adopt getProcessInfo tty_name resolves the adopted master" {
+    const testing = std.testing;
+    switch (builtin.os.tag) {
+        .linux, .macos => {},
+        else => return error.SkipZigTest,
+    }
+
+    const opened = try Pty.open(adopt_test_size);
+    defer _ = std.posix.system.close(opened.slave);
+
+    var adopt = Adopt.init(.{ .master_fd = opened.master });
+    defer adopt.deinit();
+
+    const name = adopt.getProcessInfo(.tty_name) orelse return error.TestUnexpectedResult;
+    try testing.expect(std.mem.startsWith(u8, name, "/dev/"));
+}
+
+test "Adopt backend union dispatches resize to the adopt variant" {
+    const testing = std.testing;
+    try skipAdoptTest();
+
+    const opened = try Pty.open(adopt_test_size);
+    defer _ = std.posix.system.close(opened.slave);
+
+    var be: Backend = .{ .adopt = Adopt.init(.{ .master_fd = opened.master }) };
+    defer be.deinit();
+
+    try be.resize(
+        .{ .columns = 70, .rows = 20 },
+        .{ .width = 700, .height = 400 },
+    );
+    const ws = try opened.getSize();
+    try testing.expectEqual(@as(u16, 20), ws.ws_row);
+    try testing.expectEqual(@as(u16, 70), ws.ws_col);
+}
