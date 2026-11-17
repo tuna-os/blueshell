@@ -97,10 +97,22 @@ implementation.
 ## `src/apprt/gtk/class/surface.zig` — LOW risk
 
 **What we added:** `externalMasterFd` calls
-`Application.default().takePendingExternalMasterFd()`. Foreground-agent
-detection also reads the PTY master directly from the adopt backend.
+`Application.default().takePendingExternalMasterFd()`.
 `sendDesktopNotification` defaults an empty title to `"Blueshell"` and
 uses `"org.tunaos.blueshell"` as the notification icon.
+
+Agent awareness (RFC #22) lives in the fork-owned `surface_agent.zig`
+(foreground-process detection, which reads the PTY master directly from
+the adopt backend, viewport sampling, badge, notification and tint).
+`surface.zig` keeps only one `Private` field
+(`agent: surface_agent.AgentWatch`), the `agentTick` timer trampoline,
+and three call sites: `priv.agent.stop()` in `dispose`,
+`priv.agent.start(...)` at the end of `propConfig`, and
+`priv.agent.acknowledge(...)` in `updateFocus`.
+
+**Resolution recipe:** keep the call sites; if upstream restructures
+`propConfig`, `dispose` or `updateFocus`, move the one-line calls to the
+equivalent place. The agent logic itself never conflicts.
 
 ---
 
