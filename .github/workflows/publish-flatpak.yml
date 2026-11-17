@@ -58,6 +58,13 @@ jobs:
           persist-credentials: false
           submodules: recursive
 
+      # flatpak-builder updates the runtimes baked into the image. Some
+      # runner hosts' overlayfs cannot rename image-layer directories, and
+      # that update fails with "Invalid cross-device link". The action
+      # copies the installation up only on those hosts (tuna-os/.github#380).
+      - name: Make the image's Flatpak installations updatable
+        uses: tuna-os/.github/.github/actions/flatpak-copy-up@6c76230bdd69e19634d9c74d5e3edbd8eacadd9f # main  # zizmor: ignore[ref-version-mismatch] pinned to a reviewed main commit; Renovate bumps the digest, so main may be ahead
+
       - name: Build
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6.8
         with:
