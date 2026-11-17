@@ -2,7 +2,7 @@
 //! agent integration. This module owns the state machine and the pattern
 //! tables; the GTK glue (a periodic tick per surface that inspects the
 //! pty's foreground process and samples the viewport) lives in
-//! `surface.zig` and feeds `next()` with observations.
+//! `surface_agent.zig` and feeds `next()` with observations.
 //!
 //! States, following herdr's classification:
 //!
