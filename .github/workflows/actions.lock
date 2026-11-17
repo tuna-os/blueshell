@@ -14,6 +14,7 @@ workflows:
     '.github/workflows/ghostty-ptyxis.yml':
         - 'actions/checkout@v7.0.1'
         - 'flatpak/flatpak-github-actions@v6.8'
+        - 'tuna-os/.github@6c76230bdd69e19634d9c74d5e3edbd8eacadd9f'
     '.github/workflows/milestone.yml':
         - 'hustcer/milestone-action@v3.2'
     '.github/workflows/nix.yml':
@@ -31,6 +32,7 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'flatpak/flatpak-github-actions@v6.8'
         - 'tuna-os/.github@4f08bf7b295f70306352e0e865b7f3d5bc08d5f6'
+        - 'tuna-os/.github@6c76230bdd69e19634d9c74d5e3edbd8eacadd9f'
         - 'tuna-os/.github@main'
     '.github/workflows/publish-ghostty-flatpak.yml':
         - 'actions/checkout@v7.0.1'
@@ -241,6 +243,11 @@ dependencies:
     'tuna-os/.github@4f08bf7b295f70306352e0e865b7f3d5bc08d5f6':
         ref: 'main'
         commit: 'sha1-4f08bf7b295f70306352e0e865b7f3d5bc08d5f6'
+        owner_id: 223733964
+        repo_id: 1187761922
+    'tuna-os/.github@6c76230bdd69e19634d9c74d5e3edbd8eacadd9f':
+        ref: 'main'
+        commit: 'sha1-6c76230bdd69e19634d9c74d5e3edbd8eacadd9f'
         owner_id: 223733964
         repo_id: 1187761922
     'tuna-os/.github@main':
