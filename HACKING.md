@@ -71,7 +71,14 @@ All Ptyxis UI code lives under `src/apprt/gtk/`:
 | `class/palette.zig` | Palette data model; `palettes_embed.zig` embeds the Gogh JSON at build time |
 | `class/container_client.zig` | D-Bus ContainerClient — ListContainers / CreatePty / Spawn |
 | `class/container_object.zig` | GObject wrapper for a discovered container |
-| `class/window.zig` | Hamburger menu, theme picker, zoom, container new-tab picker |
+| `class/window.zig` | Window chrome, container new-tab picker |
+| `class/window_menu.zig` | Hamburger menu model, style selector, zoom row |
+| `class/actions.zig` | Application action dispatcher (split out of `application.zig`) |
+| `class/container_spawn.zig` | Container spawn ownership transaction |
+| `class/osc_palette.zig` | Per-surface palette overrides via OSC sequences |
+| `class/agent_monitor.zig` | Pure agent-activity state machine and pattern tables |
+| `class/surface_agent.zig` | GTK side of agent awareness (per-surface watch, tab badge, notifications) |
+| `class/preferences_logic.zig` | Pure preferences logic, unit-tested in CI |
 | `ui/1.5/preferences-window.blp` | Blueprint for the preferences window |
 | `ui/1.5/profile-editor.blp` | Blueprint for the profile editor |
 | `third_party/ptyxis-agent/` | Bundled ptyxis-agent (standalone meson build) |
@@ -338,7 +345,7 @@ Before submitting GTK changes, test them using the provided headless automation 
 
 ## CI & GitHub Workflows
 
-The repository contains 20 workflow files under `.github/workflows/`. Because Blueshell is a fork of Ghostty, these workflows fall into two distinct groups: **Fork-owned / active workflows** tailored for Blueshell on Linux/TunaOS, and **Inherited upstream Ghostty workflows**, many of which do not run here or fail due to missing upstream secrets/runners.
+The repository keeps its workflow files under `.github/workflows/`. Because Blueshell is a fork of Ghostty, these workflows fall into two distinct groups: **Fork-owned / active workflows** tailored for Blueshell on Linux/TunaOS, and **Inherited upstream Ghostty workflows**, many of which do not run here or fail due to missing upstream secrets/runners.
 
 ### Active Workflows
 
@@ -351,6 +358,7 @@ The following workflows are actively maintained and run in the `tuna-os/blueshel
 | **Publish Flatpak** | `publish-flatpak.yml` | Push (`ptyxis-port`, `v*` tags), dispatch | Native multi-arch build (`x86_64` on `ubuntu-24.04`, `aarch64` on `ubuntu-24.04-arm`). Pushes OCI image to GHCR (`ghcr.io/tuna-os/blueshell`), exports per-arch tarballs for release bundles, and updates the TunaOS Flatpak index (`tunaos.org/flatpak`) via `FLATPAK_INDEX_TOKEN`. |
 | **Publish Ghostty Flatpak** | `publish-ghostty-flatpak.yml` | Cron (Sundays 05:00 UTC), dispatch, PR (paths: `flatpak/ghostty-stock/**`) | Builds and republishes stock upstream Ghostty (`com.mitchellh.ghostty`) pinned at a known-good commit to the TunaOS Flatpak remote, alongside Blueshell. |
 | **upstream-sync** | `upstream-sync.yml` | Cron (Mondays 09:00 UTC), dispatch | Rebase automation onto `ghostty-org/ghostty:main`. If clean rebase succeeds, opens a sync PR; if conflicts arise, files an issue with conflict hotspots and commit range. See [UPSTREAM_SYNC.md](UPSTREAM_SYNC.md). |
+| **Actions Security** | `actions-security.yml` | PR, Push (`ptyxis-port`) | Verifies `.github/workflows/actions.lock` and runs zizmor over the workflows; both fail the run on a finding. |
 | **Clean Artifacts** | `clean-artifacts.yml` | Cron (Daily 00:00 UTC), dispatch | Prunes workflow run artifacts older than 1 week to conserve repository storage. |
 
 ### Inherited Upstream Workflows
