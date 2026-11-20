@@ -1,0 +1,28 @@
+name: zig-test
+
+on:
+  pull_request: {}
+
+concurrency:
+  group: zig-test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Zig
+        # Version is read from build.zig.zon (minimum_zig_version).
+        uses: mlugg/setup-zig@v2.2.1
+
+      - name: Test
+        run: zig build test
