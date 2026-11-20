@@ -26,6 +26,7 @@ permissions:
 
 jobs:
   setup:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     outputs:
       version: ${{ steps.extract_version.outputs.version }}
@@ -83,6 +84,7 @@ jobs:
           cat $GITHUB_OUTPUT
 
   source-tarball:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-md
     needs: [setup]
     env:
@@ -138,6 +140,7 @@ jobs:
             ghostty-source.tar.gz.minisig
 
   build-macos:
+    if: github.repository == 'ghostty-org/ghostty'
     needs: [setup]
     runs-on: namespace-profile-ghostty-macos-tahoe
     timeout-minutes: 90
@@ -308,6 +311,7 @@ jobs:
             ghostty-macos-universal-dsym.zip
 
   sentry-dsym:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     needs: [build-macos]
     steps:
@@ -334,6 +338,7 @@ jobs:
           sentry-cli dif upload --project ghostty --wait ghostty-macos-universal-dsym.zip
 
   appcast:
+    if: github.repository == 'ghostty-org/ghostty'
     needs: [setup, build-macos]
     runs-on: namespace-profile-ghostty-macos-tahoe
     env:
@@ -387,9 +392,12 @@ jobs:
 
   upload:
     if: |-
-      (github.event_name == 'workflow_dispatch' &&
-        github.event.inputs.upload == 'true') ||
-      github.event_name == 'push'
+      github.repository == 'ghostty-org/ghostty' &&
+      (
+        (github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.upload == 'true') ||
+        github.event_name == 'push'
+      )
     needs: [setup, source-tarball, build-macos, appcast]
     runs-on: namespace-profile-ghostty-sm
     env:
