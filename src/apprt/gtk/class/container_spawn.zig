@@ -79,7 +79,7 @@ test "PendingContainerSpawn: deinit cleans up untaken fd" {
     const alloc = testing.allocator;
 
     // Create a real pipe to test that deinit closes the untaken fd
-    const pipe_fds = try std.posix.pipe();
+    const pipe_fds = try compat_fd.pipe();
     const read_fd = pipe_fds[0];
     const write_fd = pipe_fds[1];
     defer compat_fd.close(read_fd);
@@ -174,7 +174,7 @@ test "PendingContainerSpawn: mock application store token matching and rejection
     try testing.expectEqual(@as(u64, 1), token1);
 
     // Stash spawn for token1
-    const pipe_fds = try std.posix.pipe();
+    const pipe_fds = try compat_fd.pipe();
     const read_fd = pipe_fds[0];
     const write_fd = pipe_fds[1];
     defer compat_fd.close(read_fd);
@@ -216,7 +216,7 @@ test "PendingContainerSpawn: pre-handoff abort cleans up pipe" {
     const testing = std.testing;
     const alloc = testing.allocator;
 
-    const pipe_fds = try std.posix.pipe();
+    const pipe_fds = try compat_fd.pipe();
     const read_fd = pipe_fds[0];
     const write_fd = pipe_fds[1];
     defer compat_fd.close(read_fd);
