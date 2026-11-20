@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   required:
+    if: github.repository == 'ghostty-org/ghostty'
     name: "Required Checks: Nix"
     runs-on: namespace-profile-ghostty-sm
     needs:
