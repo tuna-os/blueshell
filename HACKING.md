@@ -360,6 +360,7 @@ The following workflows are actively maintained and run in the `tuna-os/blueshel
 | **upstream-sync** | `upstream-sync.yml` | Cron (Mondays 09:00 UTC), dispatch | Rebase automation onto `ghostty-org/ghostty:main`. If clean rebase succeeds, opens a sync PR; if conflicts arise, files an issue with conflict hotspots and commit range. See [UPSTREAM_SYNC.md](UPSTREAM_SYNC.md). |
 | **Actions Security** | `actions-security.yml` | PR, Push (`ptyxis-port`) | Verifies `.github/workflows/actions.lock` and runs zizmor over the workflows; both fail the run on a finding. |
 | **Clean Artifacts** | `clean-artifacts.yml` | Cron (Daily 00:00 UTC), dispatch | Prunes workflow run artifacts older than 1 week to conserve repository storage. |
+| **zig-test** | `zig-test.yml` | PR | Runs `zig build test` (full suite) on Ubuntu with the GTK/libadwaita and blueprint-compiler 0.16 toolchain, pinned to the `build.zig.zon` minimum Zig version. |
 
 ### Inherited Upstream Workflows
 
