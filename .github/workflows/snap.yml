@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   build:
+    if: github.repository == 'ghostty-org/ghostty'
     permissions:
       actions: read # Download artifacts from another workflow run.
     strategy:
