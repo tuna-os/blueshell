@@ -105,12 +105,20 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'actions/create-github-app-token@v3.3.0'
         - 'mitchellh/vouch@v1.5.0'
+    '.github/workflows/zig-test.yml':
+        - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+        - 'mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29'
 dependencies:
     'actions/cache@v6.1.0':
         ref: 'v6.1.0'
         commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
         owner_id: 44036562
         repo_id: 215566462
+    'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1':
+        ref: 'v7.0.1'
+        commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
+        owner_id: 44036562
+        repo_id: 197814629
     'actions/checkout@v7.0.1':
         ref: 'v7.0.1'
         commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
@@ -195,6 +203,11 @@ dependencies:
         repo_id: 1150912706
         uses:
             - 'hustcer/setup-nu@920172d92eb04671776f3ba69d605d3b09351c30'
+    'mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29':
+        ref: 'v2.2.1'
+        commit: 'sha1-d1434d08867e3ee9daa34448df10607b98908d29'
+        owner_id: 7289241
+        repo_id: 812112570
     'mlugg/setup-zig@v2.2.1':
         ref: 'v2.2.1'
         commit: 'sha1-d1434d08867e3ee9daa34448df10607b98908d29'

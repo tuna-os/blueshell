@@ -1,0 +1,56 @@
+name: zig-test
+
+on:
+  pull_request: {}
+
+concurrency:
+  group: zig-test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same toolchain as ptyxis-tests.yml: the app's translate-c steps need
+      # GTK/libadwaita headers, and blueprint-compiler must be 0.16.
+      - name: Install GTK/libadwaita toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-4-dev libadwaita-1-dev adwaita-icon-theme gettext libbz2-dev libonig-dev \
+            libxml2-utils python3-gi
+
+      - name: Install blueprint-compiler 0.16 (Ubuntu 24.04 ships 0.12)
+        run: |
+          git init "$HOME/blueprint-compiler"
+          cd "$HOME/blueprint-compiler"
+          git remote add origin https://gitlab.gnome.org/GNOME/blueprint-compiler.git
+          git fetch --depth 1 origin be7beddc5201b1f5a5af517077dbc7c5390ecce1
+          git checkout FETCH_HEAD
+          mkdir -p "$HOME/.local/bin"
+          # Running from a git checkout reports '--version: uninstalled',
+          # which Ghostty's semver check can't parse — answer it ourselves.
+          cat > "$HOME/.local/bin/blueprint-compiler" <<EOF
+          #!/bin/sh
+          if [ "\$1" = "--version" ]; then echo 0.16.0; exit 0; fi
+          exec python3 "$HOME/blueprint-compiler/blueprint-compiler.py" "\$@"
+          EOF
+          chmod +x "$HOME/.local/bin/blueprint-compiler"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Setup Zig
+        # Version is read from build.zig.zon (minimum_zig_version).
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+
+      # gtk4-layer-shell is vendored because Ubuntu 24.04 has no package for it.
+      - name: Test
+        run: zig build test -fno-sys=gtk4-layer-shell
