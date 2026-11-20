@@ -196,7 +196,8 @@ The per-profile editor (accessible from Preferences → Profiles → Edit…) le
 
 ## Preferences
 
-Open with `Ctrl+,` or the hamburger menu.
+Open from the main (hamburger) menu → **Preferences**. It has no default
+shortcut; `Ctrl+,` opens the config file instead (see below).
 
 **Appearance**
 - Palette picker (244 palettes from the Gogh collection)
@@ -231,10 +232,11 @@ Open with `Ctrl+,` or the hamburger menu.
 | New tab | `Ctrl+Shift+T` |
 | Close tab | `Ctrl+Shift+W` |
 | Next / previous tab | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
-| Split right | `Ctrl+Shift+D` |
+| Split right / down | `Ctrl+Shift+O` / `Ctrl+Shift+E` |
 | Zoom in / out | `Ctrl+=` / `Ctrl+-` |
 | Command palette | `Ctrl+Shift+P` |
-| Preferences | `Ctrl+,` |
+| Open config file | `Ctrl+,` |
+| Reload config | `Ctrl+Shift+,` |
 | Search | `Ctrl+Shift+F` |
 
 All keybindings are configurable via `keybind = trigger=action` in `~/.config/ghostty/config`.
@@ -243,7 +245,7 @@ All keybindings are configurable via `keybind = trigger=action` in `~/.config/gh
 
 ## Configuration
 
-Blueshell uses Ghostty's standard config format at `~/.config/ghostty/config`. All [Ghostty config options](https://ghostty.org/docs/config) are supported. Changes are applied live via Preferences or by editing the file and pressing `Ctrl+Shift+R`.
+Blueshell uses Ghostty's standard config format at `~/.config/ghostty/config`. All [Ghostty config options](https://ghostty.org/docs/config) are supported. Changes are applied live via Preferences or by editing the file and pressing `Ctrl+Shift+,`.
 
 ---
 
