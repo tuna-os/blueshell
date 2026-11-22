@@ -73,7 +73,6 @@ All Ptyxis UI code lives under `src/apprt/gtk/`:
 | `class/container_object.zig` | GObject wrapper for a discovered container |
 | `class/window.zig` | Window chrome, container new-tab picker |
 | `class/window_menu.zig` | Hamburger menu model, style selector, zoom row |
-| `class/actions.zig` | Application action dispatcher (split out of `application.zig`) |
 | `class/container_spawn.zig` | Container spawn ownership transaction |
 | `class/osc_palette.zig` | Per-surface palette overrides via OSC sequences |
 | `class/agent_monitor.zig` | Pure agent-activity state machine and pattern tables |
