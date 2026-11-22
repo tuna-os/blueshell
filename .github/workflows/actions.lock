@@ -16,7 +16,7 @@ workflows:
         - 'flatpak/flatpak-github-actions@v6.8'
         - 'tuna-os/.github@6c76230bdd69e19634d9c74d5e3edbd8eacadd9f'
     '.github/workflows/milestone.yml':
-        - 'hustcer/milestone-action@v3.2'
+        - 'hustcer/milestone-action@v3.3'
     '.github/workflows/nix.yml':
         - 'actions/checkout@v7.0.1'
         - 'cachix/cachix-action@v17'
@@ -171,21 +171,21 @@ dependencies:
         commit: 'sha1-9b3254085494b55a0f7c4c2b3d2d52cc712ce370'
         owner_id: 9919
         repo_id: 259445878
-    'hustcer/milestone-action@v3.2':
-        ref: 'v3.2'
-        commit: 'sha1-2f38355153344ccaaa44b5b5fcff9f604dff1b45'
+    'hustcer/milestone-action@v3.3':
+        ref: 'v3.3'
+        commit: 'sha1-815f8224db33f809c5063c66e2e4f530208f401e'
         owner_id: 1161607
         repo_id: 871927269
         uses:
-            - 'hustcer/setup-nu@v3.27'
+            - 'hustcer/setup-nu@v3.30'
     'hustcer/setup-nu@920172d92eb04671776f3ba69d605d3b09351c30':
         ref: 'v3.22'
         commit: 'sha1-920172d92eb04671776f3ba69d605d3b09351c30'
         owner_id: 1161607
         repo_id: 486109928
-    'hustcer/setup-nu@v3.27':
-        ref: 'v3.27'
-        commit: 'sha1-9215c80adb545a85c419d5085b76eb6d082f49e7'
+    'hustcer/setup-nu@v3.30':
+        ref: 'v3.30'
+        commit: 'sha1-1b8faed9a8ff673c8ce0beae243e0b72d0787241'
         owner_id: 1161607
         repo_id: 486109928
     'mitchellh/vouch@v1.5.0':
