@@ -53,7 +53,18 @@ jobs:
           git init "$HOME/blueprint-compiler"
           cd "$HOME/blueprint-compiler"
           git remote add origin https://gitlab.gnome.org/GNOME/blueprint-compiler.git
-          git fetch --depth 1 origin be7beddc5201b1f5a5af517077dbc7c5390ecce1
+          # gitlab.gnome.org throws transient 5xx; retry before it can fail
+          # the job. Steps run under bash -e, so keep the fetch in an `if`.
+          fetched=0
+          for attempt in 1 2 3 4; do
+            if git fetch --depth 1 origin be7beddc5201b1f5a5af517077dbc7c5390ecce1; then
+              fetched=1
+              break
+            fi
+            echo "fetch attempt $attempt failed; retrying in $((attempt * 15))s"
+            sleep $((attempt * 15))
+          done
+          [ "$fetched" = 1 ] || exit 1
           git checkout FETCH_HEAD
           mkdir -p "$HOME/.local/bin"
           # Running from a git checkout reports '--version: uninstalled',
