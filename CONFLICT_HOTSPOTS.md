@@ -136,6 +136,15 @@ equivalent place. The agent logic itself never conflicts.
 - Smoke-test env hooks (`GHOSTTY_PTYXIS_TEST_*`).
 - Force-analysis comptime block listing all `ContainerClient` and
   `PendingContainerSpawn` methods we want eagerly analyzed.
+- Inside upstream's `Action` dispatcher (kept in this file, in
+  upstream's position between `Application` and `setGtkEnv`): the
+  desktop-notification default title `"Blueshell"` and icon
+  `org.tunaos.blueshell`, and a block at the top of `reloadConfig` that
+  sets `quiet_reload` from `opts.soft` or `pending_quiet_reload` (the
+  quiet-reload state `window.zig` reads through `isQuietReload`). These
+  are the dispatcher's only fork patches. Keep the dispatcher in this
+  file: moving it to a fork-owned file turns every upstream edit to it
+  into a hand-ported conflict.
 
 **Why it can break:** upstream churns the actions array, the Private
 struct, the startup sequence, and Ghostty-action handlers all
@@ -146,6 +155,8 @@ in the actions array are NEW names; if upstream renamed an existing
 action ours still apply unchanged. Our Private struct additions go at
 the end of the struct after upstream's fields. Smoke-test envs and
 the comptime block are leaf additions — keep them.
+Inside `Action`, take upstream's version of each handler, then re-apply
+the two notification strings and the `reloadConfig` quiet-reload block.
 
 ---
 
