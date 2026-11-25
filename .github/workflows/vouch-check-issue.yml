@@ -19,7 +19,7 @@ jobs:
       VOUCH_APP_ID: ${{ secrets.VOUCH_APP_ID }}
       VOUCH_APP_PRIVATE_KEY: ${{ secrets.VOUCH_APP_PRIVATE_KEY }}
     steps:
-      - uses: actions/create-github-app-token@v3.3.0  # zizmor: ignore[github-app] vouch needs the app installation scopes; narrowing the token changes behaviour
+      - uses: actions/create-github-app-token@v3.4.0  # zizmor: ignore[github-app] vouch needs the app installation scopes; narrowing the token changes behaviour
         id: app-token
         if: env.VOUCH_APP_ID != '' && env.VOUCH_APP_PRIVATE_KEY != ''
         with:
