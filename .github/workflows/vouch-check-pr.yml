@@ -29,7 +29,7 @@ jobs:
         if: env.VOUCH_APP_ID == '' || env.VOUCH_APP_PRIVATE_KEY == ''
         run: echo "::notice::Vouch PR checking is disabled until both VOUCH_APP_ID and VOUCH_APP_PRIVATE_KEY are configured."
 
-      - uses: actions/create-github-app-token@v3.3.0  # zizmor: ignore[github-app] vouch needs the app installation scopes; narrowing the token changes behaviour
+      - uses: actions/create-github-app-token@v3.4.0  # zizmor: ignore[github-app] vouch needs the app installation scopes; narrowing the token changes behaviour
         id: app-token
         if: env.VOUCH_APP_ID != '' && env.VOUCH_APP_PRIVATE_KEY != ''
         with:
