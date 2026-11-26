@@ -1,6 +1,6 @@
 # Blueshell Roadmap
 
-**Last updated**: 2026-09-02 | **Status**: Shipping to the TunaOS Flatpak remote, unversioned
+**Last updated**: 2026-11-25 | **Status**: Shipping to the TunaOS Flatpak remote, latest release v1.3.1
 
 Part of the [TunaOS](https://tunaos.org) ecosystem. A container-native GNOME
 terminal: Ptyxis-style user experience on the Ghostty rendering engine,
@@ -28,12 +28,12 @@ that decision was made.
 | | |
 |---|---|
 | Distribution | `org.tunaos.blueshell` in the TunaOS Flatpak remote since 2026-08-27, `latest` tag, amd64 + arm64 |
-| Versioning | None — 0 tags, 0 releases, 0 milestones ([#59](https://github.com/tuna-os/blueshell/issues/59)) |
-| Upstream freshness | No upstream Ghostty commit newer than 2026-06-03 ([#57](https://github.com/tuna-os/blueshell/issues/57)) |
-| Upstream sync automation | 13 scheduled runs, 13 failures, no successful run ([#57](https://github.com/tuna-os/blueshell/issues/57)) |
-| CI | 4 of 19 workflows execute; upstream's `Test` suite has never completed here ([#58](https://github.com/tuna-os/blueshell/issues/58)) |
-| Governance | CODEOWNERS assigns every path to `@ghostty-org/*` teams that do not exist in this org ([#58](https://github.com/tuna-os/blueshell/issues/58)) |
-| Second upstream | `third_party/ptyxis-agent` vendored without provenance ([#56](https://github.com/tuna-os/blueshell/issues/56)) |
+| Versioning | `v1.3.1` released 2026-10-14, plus a rolling `tip` pre-release ([#59](https://github.com/tuna-os/blueshell/issues/59), closed) |
+| Upstream freshness | Rebased onto upstream Ghostty `7597e85f` (committed upstream 2026-10-13) by [#142](https://github.com/tuna-os/blueshell/pull/142); no upstream commit has landed since ([#231](https://github.com/tuna-os/blueshell/issues/231)) |
+| Upstream sync automation | `upstream-sync.yml` was repaired ([#57](https://github.com/tuna-os/blueshell/issues/57), closed) but has been switched off since 2026-10-15, so no weekly run has happened since ([#231](https://github.com/tuna-os/blueshell/issues/231)) |
+| CI | `ptyxis-tests` and `zig-test` (`zig build test` on `ubuntu-latest`) run on every pull request; jobs inherited from upstream are guarded to run only in `ghostty-org/ghostty` ([#58](https://github.com/tuna-os/blueshell/issues/58), closed) |
+| Governance | `.github/CODEOWNERS` routes risky paths (`.github/`, container, sudoers, polkit, SSH and signing files) to `@hanthor`; GitHub reads it before the root `CODEOWNERS` inherited from upstream |
+| Second upstream | `third_party/ptyxis-agent` carries origin, revision and license in `PROVENANCE.md` ([#56](https://github.com/tuna-os/blueshell/issues/56), closed) |
 
 ## Gate 1 — the fork sustains itself
 
@@ -43,11 +43,11 @@ priority work in the repository.
 
 | Gate | Required evidence |
 |---|---|
-| The alarm can fire | One `upstream-sync.yml` run that reaches the conflict path and successfully opens the issue — which needs `issues: write` in the workflow's `permissions` and an `upstream-sync` label that exists. Both are missing today, and `docs/TUNA_OS_PROMOTION.md` §1 already warned that the label had to survive the org transfer |
-| The rebase lands | One upstream sync merged to `ptyxis-port`, closing the gap that has stood since 2026-06-03, with `upstream-sync/2026-06-08` and `upstream-sync/2026-06-15` deleted rather than left implying pending work |
+| The alarm can fire | One `upstream-sync.yml` run that reaches the conflict path and successfully opens the issue — which needs `issues: write` in the workflow's `permissions` and an `upstream-sync` label that exists. Both are now in place; the conflict path has still not run on a schedule, because the workflow is switched off ([#231](https://github.com/tuna-os/blueshell/issues/231)) |
+| The rebase lands | One upstream sync merged to `ptyxis-port`, closing the gap that has stood since 2026-06-03, with `upstream-sync/2026-06-08` and `upstream-sync/2026-06-15` deleted rather than left implying pending work. In part: [#142](https://github.com/tuna-os/blueshell/pull/142) merged the rebase onto `7597e85f` on 2026-10-14, but both stale branches still exist |
 | Drift is detected, not just conflicted | Upstream's `test.yml` green on a runner this org actually has — at minimum the Linux/GTK subset, since this fork ships neither macOS nor Windows. `UPSTREAM_SYNC.md`'s fourth pillar assumes this suite runs |
-| The conflict map is true | [#55](https://github.com/tuna-os/blueshell/issues/55) resolved — `CONFLICT_HOTSPOTS.md` matches the files actually patched, checked by something other than memory |
-| The second upstream has a contract | [#56](https://github.com/tuna-os/blueshell/issues/56) resolved — `third_party/ptyxis-agent` carries a stated origin, revision and license |
+| The conflict map is true | Met: [#55](https://github.com/tuna-os/blueshell/issues/55) closed — `scripts/check-conflict-hotspots.sh` runs in `ptyxis-tests` and checks `CONFLICT_HOTSPOTS.md` against the files actually patched |
+| The second upstream has a contract | Met: [#56](https://github.com/tuna-os/blueshell/issues/56) closed — `third_party/ptyxis-agent/PROVENANCE.md` states origin, revision and license |
 
 **Sustained-sync definition of done**: three consecutive weekly syncs that either
 merge cleanly or open a conflict issue that a human closes within the week. One
@@ -61,9 +61,9 @@ without the other publishes drift.
 
 | Gate | Required evidence |
 |---|---|
-| A version exists | `v0.1.0` tagged from `ptyxis-port`, carried into the Flatpak publish alongside `latest`, so the remote offers something pinnable and a bug report can name a build |
+| A version exists | A version tagged from `ptyxis-port`, carried into the Flatpak publish alongside `latest`, so the remote offers something pinnable and a bug report can name a build. In part: `v1.3.1` is tagged and its release carries the Flatpak bundles, but `publish-flatpak.yml` still pushes the remote image as `latest` only |
 | Provenance is stated | Release notes naming the upstream Ghostty commit the build is rebased on. For a fork this is the load-bearing field — it is the answer to "which upstream fixes do I have" |
-| The front page matches reality | README leads with the TunaOS remote install rather than the `nightly.link` bundle, which has been the supported path since 2026-08-27 |
+| The front page matches reality | Met: README Installation leads with the TunaOS remote (`flatpak remote-add … tuna-os.flatpakrepo`) |
 | Publish is gated | The Flatpak publish refuses to run past a stated upstream-staleness threshold. Shipping to a user-facing remote from an unbounded gap is what turns a maintenance problem into a user-facing one |
 | Rollback is an operation | A prior tagged digest retained in the index and a documented procedure for pointing the remote back at it |
 
@@ -72,7 +72,7 @@ without the other publishes drift.
 | Gate | Required evidence |
 |---|---|
 | Review routing resolves | CODEOWNERS mapped to real owners, or reduced to the fork-owned paths (`preferences_window.zig`, `preferences_logic.zig`, `profile_store.zig`, `config_bridge.zig`, `test/ui/`, workflows) |
-| The branch is protected | Required checks on `ptyxis-port` — currently none of the 15 branches is protected, so the path to the public remote has no gate |
+| The branch is protected | Required checks on `ptyxis-port` — its ruleset blocks deletion and force-push but requires no status check, so the path to the public remote has no gate |
 | Governance is decided | The five `vouch-*` workflows are either made to run or removed. A half-wired governance mechanism is worse than an explicit BDFL line, and a working one would be a candidate answer to the org's open governance gap (`tunaos#1168`) |
 | Entry points exist | Repository topics, a homepage link, and `good first issue` applied to work that qualifies — the labels exist and are unused |
 | Workflow inventory is honest | Every workflow either runs or is deleted; 15 that structurally cannot run make CI health unreadable for everyone after |
@@ -82,12 +82,13 @@ without the other publishes drift.
 The cheapest long-term maintenance strategy is a smaller patch set, and
 `UPSTREAM_SYNC.md`'s third pillar says so: *"every accepted patch is a hotspot
 entry deleted forever."* [#6](https://github.com/tuna-os/blueshell/issues/6)
-(external `master_fd` adoption in `termio.Exec`) is the pattern. Each hotspot
-entry should carry a standing question — can this go upstream? — and the answer
-belongs in `CONFLICT_HOTSPOTS.md` next to the recipe.
+(external `master_fd` adoption in `termio.Exec`) was the first candidate; it was
+closed as not planned. Each hotspot entry should carry a standing question —
+can this go upstream? — and the answer belongs in `CONFLICT_HOTSPOTS.md` next
+to the recipe.
 
-Sibling direction: [#23](https://github.com/tuna-os/blueshell/issues/23) asks
-`tuna-os/corral` for machine-readable `corral list --json`, which is the
+Sibling direction: [#23](https://github.com/tuna-os/blueshell/issues/23) (closed)
+asked `tuna-os/corral` for machine-readable `corral list --json`, which is the
 container-integration seam Blueshell owns end to end within the org.
 
 ## Deliberately not now
@@ -101,6 +102,6 @@ container-integration seam Blueshell owns end to end within the org.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [HACKING.md](HACKING.md) and
-[TESTING.md](TESTING.md). The fork's own test suite (`ptyxis-tests`) is the one
-CI job that currently gates merges; treat it as the contract until Gate 1's
-`test.yml` work lands.
+[TESTING.md](TESTING.md). The fork's own test suite (`ptyxis-tests`) and
+`zig-test` run on every pull request. No check is required on `ptyxis-port` yet
+(Gate 3), so treat both as the contract.
